@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turing Wings — Cohort Registration</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #f4f6fb;
+      color: #1f2937;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .brand h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .brand p {
+      margin-top: 6px;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
+    .form-group label .required {
+      color: #ef4444;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      color: #111827;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+    }
+
+    .field-error {
+      color: #dc2626;
+      font-size: 12px;
+      margin-top: 4px;
+      display: none;
+    }
+
+    .form-group.invalid input,
+    .form-group.invalid select {
+      border-color: #ef4444;
+    }
+
+    .form-group.invalid .field-error {
+      display: block;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .pay-button {
+      width: 100%;
+      margin-top: 8px;
+      padding: 13px;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: inherit;
+      color: #ffffff;
+      background: #7c3aed;
+      border: none;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .pay-button:hover {
+      background: #6d28d9;
+    }
+
+    .pay-button:disabled {
+      background: #a5b4fc;
+      cursor: not-allowed;
+    }
+
+    .message {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+      display: none;
+      word-break: break-word;
+    }
+
+    .message.show {
+      display: block;
+    }
+
+    .message.success {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #047857;
+    }
+
+    .message.error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+    }
+
+    .message.info {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+    }
+
+    .price-banner {
+      text-align: center;
+      padding: 10px;
+      background: #f5f3ff;
+      border: 1px dashed #c4b5fd;
+      border-radius: 8px;
+      color: #5b21b6;
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 20px;
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <h1>Turing Wings</h1>
+      <p>Cohort Registration</p>
+    </div>
+
+    <div class="card">
+      <!--
+        Test mode banner. When wiring up the real page, remove the ₹1 banner
+        and read the actual price from the selected cohort instead of CONFIG.amount.
+      -->
+      <div class="price-banner" id="amountBanner">Test Mode — Paying ₹1</div>
+
+      <form id="registrationForm" novalidate>
+        <div class="form-group">
+          <label for="fullName">Full Name <span class="required">*</span></label>
+          <input type="text" id="fullName" name="fullName" autocomplete="name" />
+          <div class="field-error" data-error-for="fullName">Please enter your full name.</div>
+        </div>
+
+        <div class="row">
+          <div class="form-group">
+            <label for="mobileNumber">Mobile Number <span class="required">*</span></label>
+            <input type="tel" id="mobileNumber" name="mobileNumber" maxlength="10" autocomplete="tel" />
+            <div class="field-error" data-error-for="mobileNumber">Enter a valid 10-digit mobile number.</div>
+          </div>
+          <div class="form-group">
+            <label for="email">Email <span class="required">*</span></label>
+            <input type="email" id="email" name="email" autocomplete="email" />
+            <div class="field-error" data-error-for="email">Enter a valid email address.</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="collegeName">College Name <span class="required">*</span></label>
+          <input type="text" id="collegeName" name="collegeName" autocomplete="organization" />
+          <div class="field-error" data-error-for="collegeName">Please enter your college name.</div>
+        </div>
+
+        <div class="row">
+          <div class="form-group">
+            <label for="stream">Stream <span class="required">*</span></label>
+            <input type="text" id="stream" name="stream" placeholder="e.g. Engineering" />
+            <div class="field-error" data-error-for="stream">Please enter your stream.</div>
+          </div>
+          <div class="form-group">
+            <label for="branch">Branch</label>
+            <input type="text" id="branch" name="branch" placeholder="e.g. CSE (optional)" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="form-group">
+            <label for="currentYear">Current Year <span class="required">*</span></label>
+            <select id="currentYear" name="currentYear">
+              <option value="">Select year</option>
+              <option value="1st Year">1st Year</option>
+              <option value="2nd Year">2nd Year</option>
+              <option value="3rd Year">3rd Year</option>
+              <option value="4th Year">4th Year</option>
+              <option value="5th Year">5th Year</option>
+              <option value="Alumni">Alumni</option>
+            </select>
+            <div class="field-error" data-error-for="currentYear">Please select your current year.</div>
+          </div>
+          <div class="form-group">
+            <label for="cohortId">Cohort <span class="required">*</span></label>
+            <select id="cohortId" name="cohortId" disabled>
+              <option value="">Loading cohorts...</option>
+            </select>
+            <div class="field-error" data-error-for="cohortId">Please select a cohort.</div>
+          </div>
+        </div>
+
+        <button type="submit" class="pay-button" id="payButton" disabled>Pay ₹1</button>
+      </form>
+
+      <div class="message" id="messageBox" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      // ------------------------------------------------------------
+      // Configuration
+      // ------------------------------------------------------------
+      const CONFIG = {
+        baseUrl: 'http://localhost:5000',
+        // TEST amount in INR (whole units). Replace with the real cohort
+        // price when the backend starts charging actual amounts.
+        amount: 1,
+        currency: 'INR',
+      };
+
+      // ----------------------------------------------------------------------------
+      // DOM helpers
+      // ----------------------------------------------------------------------------
+      const form = document.getElementById('registrationForm');
+      const payButton = document.getElementById('payButton');
+      const messageBox = document.getElementById('messageBox');
+      const banner = document.getElementById('amountBanner');
+      const cohortSelect = document.getElementById('cohortId');
+      const fields = {
+        fullName: document.getElementById('fullName'),
+        mobileNumber: document.getElementById('mobileNumber'),
+        collegeName: document.getElementById('collegeName'),
+        stream: document.getElementById('stream'),
+        branch: document.getElementById('branch'),
+        email: document.getElementById('email'),
+        currentYear: document.getElementById('currentYear'),
+        cohortId: cohortSelect,
+      };
+
+      function showMessage(type, text) {
+        messageBox.className = 'message ' + type + ' show';
+        messageBox.textContent = text;
+      }
+
+      function clearMessage() {
+        messageBox.className = 'message';
+        messageBox.textContent = '';
+      }
+
+      function clearFieldErrors() {
+        document.querySelectorAll('.form-group.invalid').forEach(function (g) {
+          g.classList.remove('invalid');
+        });
+      }
+
+      function setBusy(busy) {
+        payButton.disabled = busy || cohortSelect.value === '';
+        payButton.textContent = busy ? 'Please wait...' : 'Pay ₹' + CONFIG.amount;
+      }
+
+      // ----------------------------------------------------------------------------
+      // Build the exact payload expected by the backend payment/registration APIs.
+      // The keys must match the backend contract exactly.
+      // ----------------------------------------------------------------------------
+      function buildRegistrationPayload(input) {
+        return {
+          fullName: input.fullName,
+          mobileNumber: input.mobileNumber,
+          email: input.email,
+          collegeName: input.collegeName,
+          stream: input.stream,
+          branch: input.branch,
+          currentYear: input.currentYear,
+          cohortId: input.cohortId,
+        };
+      }
+
+      // ----------------------------------------------------------------------------
+      // Validation
+      // ----------------------------------------------------------------------------
+      function validateForm(input) {
+        clearFieldErrors();
+        let valid = true;
+
+        function markInvalid(fieldName) {
+          valid = false;
+          const group = fields[fieldName].closest('.form-group');
+          if (group) group.classList.add('invalid');
+        }
+
+        if (!input.fullName || input.fullName.trim().length < 3) markInvalid('fullName');
+        if (!/^[6-9]\d{9}$/.test(input.mobileNumber)) markInvalid('mobileNumber');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) markInvalid('email');
+        if (!input.collegeName || input.collegeName.trim().length < 3) markInvalid('collegeName');
+        if (!input.stream || !input.stream.trim()) markInvalid('stream');
+        if (!input.currentYear) markInvalid('currentYear');
+        if (!input.cohortId) markInvalid('cohortId');
+
+        return valid;
+      }
+
+      // ----------------------------------------------------------------------------
+      // Cohort list
+      // ----------------------------------------------------------------------------
+      async function loadCohorts() {
+        try {
+          const res = await fetch(CONFIG.baseUrl + '/api/v1/cohorts');
+          const data = await res.json().catch(function () { return {}; });
+          if (!res.ok) {
+            throw new Error(data.message || 'Failed to load cohorts.');
+          }
+
+          const cohorts = Array.isArray(data.data) ? data.data : [];
+
+          if (cohorts.length === 0) {
+            cohortSelect.innerHTML = '';
+            const empty = document.createElement('option');
+            empty.value = '';
+            empty.textContent = 'No cohorts open for registration';
+            cohortSelect.appendChild(empty);
+            showMessage('error', 'No cohorts are currently open for registration.');
+            return;
+          }
+
+          cohortSelect.innerHTML = '';
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Select a cohort';
+          cohortSelect.appendChild(placeholder);
+
+          cohorts.forEach(function (cohort) {
+            const option = document.createElement('option');
+            option.value = cohort.id;
+            option.textContent = cohort.title + ' — ₹' + cohort.price;
+            cohortSelect.appendChild(option);
+          });
+
+          cohortSelect.disabled = false;
+          clearMessage();
+        } catch (error) {
+          cohortSelect.innerHTML = '';
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'Failed to load cohorts';
+          cohortSelect.appendChild(option);
+          showMessage('error', error.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      // ----------------------------------------------------------------------------
+      // API calls
+      // ----------------------------------------------------------------------------
+      async function createOrder(payload) {
+        const res = await fetch(CONFIG.baseUrl + '/api/v1/payments/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to create payment order.');
+        }
+        return data.data;
+      }
+
+      async function verifyPayment(payload) {
+        const res = await fetch(CONFIG.baseUrl + '/api/v1/payments/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(function () { return {}; });
+        return { ok: res.ok, data: data };
+      }
+
+      // ----------------------------------------------------------------------------
+      // Razorpay checkout
+      // ----------------------------------------------------------------------------
+      function launchCheckout(orderData, registrationPayload) {
+        return new Promise(function (resolve, reject) {
+          const options = {
+            key: orderData.razorpayKey,
+            order_id: orderData.orderId,
+            amount: orderData.amount,
+            currency: orderData.currency || CONFIG.currency,
+            name: 'Turing Wings',
+            description: 'Cohort Registration',
+            prefill: {
+              name: registrationPayload.fullName,
+              email: registrationPayload.email,
+              contact: registrationPayload.mobileNumber,
+            },
+            handler: function (response) {
+              resolve(response);
+            },
+            modal: {
+              ondismiss: function () {
+                reject(new Error('Payment window closed by the user.'));
+              },
+            },
+          };
+
+          const rzp = new Razorpay(options);
+          rzp.on('payment.failed', function (response) {
+            const err = response.error || {};
+            reject(new Error(err.description || 'Payment failed.'));
+          });
+          rzp.open();
+        });
+      }
+
+      // ----------------------------------------------------------------------------
+      // Main flow
+      // ----------------------------------------------------------------------------
+      async function handleSubmit(event) {
+        event.preventDefault();
+        clearMessage();
+
+        const input = {
+          fullName: fields.fullName.value.trim(),
+          mobileNumber: fields.mobileNumber.value.trim(),
+          email: fields.email.value.trim(),
+          collegeName: fields.collegeName.value.trim(),
+          stream: fields.stream.value.trim(),
+          branch: fields.branch.value.trim(),
+          currentYear: fields.currentYear.value,
+          cohortId: cohortSelect.value,
+        };
+
+        if (!validateForm(input)) {
+          showMessage('error', 'Please fix the highlighted fields and try again.');
+          return;
+        }
+
+        const registrationPayload = buildRegistrationPayload(input);
+
+        setBusy(true);
+        showMessage('info', 'Creating payment order...');
+
+        let orderData;
+        try {
+          orderData = await createOrder(registrationPayload);
+        } catch (error) {
+          setBusy(false);
+          showMessage('error', error.message);
+          return;
+        }
+
+        try {
+          const paymentResult = await launchCheckout(orderData, registrationPayload);
+
+          showMessage('info', 'Verifying payment...');
+
+          const verifyPayload = Object.assign({}, registrationPayload, {
+            razorpay_order_id: paymentResult.razorpay_order_id,
+            razorpay_payment_id: paymentResult.razorpay_payment_id,
+            razorpay_signature: paymentResult.razorpay_signature,
+          });
+
+          const verification = await verifyPayment(verifyPayload);
+          if (verification.ok) {
+            showMessage('success', 'Payment successful! Your registration is confirmed.');
+          } else {
+            showMessage(
+              'error',
+              'Payment was received, but verification could not be confirmed. Contact support with your payment ID: ' +
+                paymentResult.razorpay_payment_id
+            );
+          }
+        } catch (error) {
+          showMessage('error', error.message || 'Payment could not be completed.');
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      form.addEventListener('submit', handleSubmit);
+      cohortSelect.addEventListener('change', function () { setBusy(false); });
+
+      loadCohorts();
+    })();
+  </script>
+</body>
+</html>
