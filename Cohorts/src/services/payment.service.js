@@ -226,10 +226,14 @@ async function verifyPayment(payload) {
         email: student.email,
         mobileNumber: student.mobile_number,
         collegeName: student.college_name,
+        stream: student.stream,
+        branch: student.branch,
+        currentYear: student.current_year,
       },
       cohort: {
         title: cohort.title,
         price: cohort.price,
+        description: cohort.description,
       },
     });
   } catch (pdfError) {

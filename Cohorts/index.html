@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -193,6 +194,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <div class="brand">
@@ -539,7 +541,7 @@
             showMessage(
               'error',
               'Payment was received, but verification could not be confirmed. Contact support with your payment ID: ' +
-                paymentResult.razorpay_payment_id
+              paymentResult.razorpay_payment_id
             );
           }
         } catch (error) {
@@ -556,4 +558,5 @@
     })();
   </script>
 </body>
+
 </html>

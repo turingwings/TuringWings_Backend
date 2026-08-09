@@ -8,10 +8,16 @@ async function findById(id) {
   return data;
 }
 
+async function findBySlug(slug) {
+  const { data, error } = await supabase.from(TABLE).select('*').eq('slug', slug).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function listActive() {
   const { data, error } = await supabase
     .from(TABLE)
-    .select('id, title, description, price, status')
+    .select('id, slug, title, description, price, status')
     .eq('status', 'ACTIVE')
     .order('created_at', { ascending: false });
 
@@ -19,4 +25,4 @@ async function listActive() {
   return data || [];
 }
 
-module.exports = { findById, listActive };
+module.exports = { findById, findBySlug, listActive };

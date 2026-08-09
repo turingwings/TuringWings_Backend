@@ -1,4 +1,33 @@
 const PDFDocument = require('pdfkit');
+const path = require('path');
+const fs = require('fs');
+const QRCode = require('qrcode');
+
+// Font Configuration (Clean, modern built-in fonts)
+const FONT_REGULAR = 'Helvetica';
+const FONT_BOLD = 'Helvetica-Bold';
+const FONT_ITALIC = 'Helvetica-Oblique';
+
+// Green Color Palette
+const COLOR_GREEN_PRIMARY = '#16A34A'; // Accent / Headers
+const COLOR_GREEN_DARK = '#15803D';    // Highlights / Paid Text
+const COLOR_GREEN_BG = '#F0FDF4';      // Light background fill
+const COLOR_GREEN_BORDER = '#BBF7D0';  // Light border
+
+// Layout Constants
+const PAGE_WIDTH = 595.28;
+const MARGIN_LEFT = 40;
+const MARGIN_RIGHT = 40;
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
+const RIGHT_COLUMN_X = 310;
+const RIGHT_COLUMN_WIDTH = MARGIN_LEFT + CONTENT_WIDTH - RIGHT_COLUMN_X;
+
+/**
+ * Format currency cleanly and consistently.
+ */
+function formatCurrency(amount) {
+  return `Rs. ${Number(amount).toFixed(2)}`;
+}
 
 /**
  * Generates a professional PDF invoice and returns it as a Buffer.
@@ -12,15 +41,34 @@ const PDFDocument = require('pdfkit');
  * @param {string} data.student.email
  * @param {string} data.student.mobileNumber
  * @param {string} data.student.collegeName
+ * @param {string} [data.student.stream]
+ * @param {string} [data.student.branch]
+ * @param {string} [data.student.currentYear]
  * @param {Object} data.cohort
  * @param {string} data.cohort.title
  * @param {number} data.cohort.price
+ * @param {string} [data.cohort.description]
  * @returns {Promise<Buffer>}
  */
 function generateInvoicePdf(data) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     try {
-      const doc = new PDFDocument({ margin: 50, size: 'A4' });
+      // 1. Generate QR Code Buffer
+      let qrBuffer = null;
+      try {
+        qrBuffer = await QRCode.toBuffer('https://www.turingwings.com', {
+          margin: 0,
+          width: 160,
+        });
+      } catch (err) {
+        console.error('[pdfGenerator] Error generating QR code:', err);
+      }
+
+      // 2. Initialize PDFKit document
+      const doc = new PDFDocument({ 
+        size: 'A4', 
+        margins: { top: 40, bottom: 0, left: MARGIN_LEFT, right: MARGIN_RIGHT } 
+      });
       const buffers = [];
 
       doc.on('data', buffers.push.bind(buffers));
@@ -28,180 +76,357 @@ function generateInvoicePdf(data) {
         const pdfBuffer = Buffer.concat(buffers);
         resolve(pdfBuffer);
       });
-      doc.on('error', (err) => {
-        reject(err);
-      });
+      doc.on('error', reject);
 
-      // Colors
-      const primaryColor = '#5B21B6'; // Violet
-      const secondaryColor = '#1F2937'; // Dark Gray
-      const lightGray = '#F3F4F6';
-      const textMuted = '#6B7280';
+      // Paths to logo images
+      const logoPath = path.join(__dirname, '../../SquareLogo.png');
+      const logoWhitePath = path.join(__dirname, '../../SquareLogo_white.png');
 
       // --- HEADER SECTION ---
-      doc.fillColor(primaryColor)
-         .fontSize(24)
-         .font('Helvetica-Bold')
-         .text('TURING WINGS', 50, 50);
+      const headerY = 38;
+      const logoSize = 48;
+      let logoDrawn = false;
 
-      doc.fontSize(10)
-         .font('Helvetica')
-         .fillColor(textMuted)
-         .text('Premium Technology Learning Cohorts', 50, 78);
+      if (fs.existsSync(logoPath)) {
+        try {
+          doc.image(logoPath, MARGIN_LEFT, headerY, { width: logoSize, height: logoSize });
+          logoDrawn = true;
+        } catch (e) {
+          console.error('[pdfGenerator] Error loading header logo:', e);
+        }
+      }
 
-      // Invoice Details (Top Right aligned)
-      doc.fillColor(secondaryColor)
-         .fontSize(12)
-         .font('Helvetica-Bold')
-         .text('INVOICE', 400, 50, { align: 'right', width: 145 });
+      // Company Name (positioned on same baseline as logo)
+      const textX = logoDrawn ? (MARGIN_LEFT + logoSize + 14) : MARGIN_LEFT;
+      // All header elements aligned on same vertical line
+      doc.font(FONT_BOLD).fontSize(20).fillColor('#1A1D20')
+        .text('TURING WINGS', textX, headerY + 10);
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor('#666666')
+        .text('Learn. Build. Innovate.', textX, headerY + 32);
 
-      doc.fontSize(9)
-         .font('Helvetica')
-         .fillColor(secondaryColor)
-         .text(`Invoice No: ${data.invoiceNumber}`, 400, 68, { align: 'right', width: 145 })
-         .text(`Date: ${data.date}`, 400, 82, { align: 'right', width: 145 });
+      // Invoice Header (right-aligned, on same line as logo & company name)
+      const invoiceHeaderX = RIGHT_COLUMN_X;
+      const invoiceHeaderWidth = RIGHT_COLUMN_WIDTH;
+      doc.font(FONT_BOLD).fontSize(28).fillColor('#1A1D20')
+        .text('INVOICE', invoiceHeaderX, headerY + 8, { align: 'right', width: invoiceHeaderWidth - 10 });
 
-      // Horizontal line separator
-      doc.moveTo(50, 110)
-         .lineTo(545, 110)
-         .strokeColor('#E5E7EB')
-         .lineWidth(1)
-         .stroke();
+      // Invoice Details (right column)
+      const detailsTop = headerY + 48;
+      const detailsLabelX = invoiceHeaderX;
+      const detailsValueX = invoiceHeaderX + 80;
+      const detailsValueWidth = invoiceHeaderWidth - 90;
 
-      // --- BILL TO / COMPANY DETAILS ---
-      // Bill To
-      doc.fillColor(primaryColor)
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text('BILLED TO:', 50, 130);
+      const drawInvoiceDetailRow = (label, val, y, isBadge = false) => {
+        doc.font(FONT_REGULAR).fontSize(9.5).fillColor('#666666')
+          .text(label, detailsLabelX, y, { width: 80 });
+        
+        if (isBadge) {
+          // Position badge closer to the value area, right-aligned within the column
+          const badgeWidth = 55;
+          const badgeX = detailsValueX + detailsValueWidth - badgeWidth;
+          const badgeY = y - 2;
+          doc.save();
+          doc.roundedRect(badgeX, badgeY, badgeWidth, 18, 3)
+             .fillColor(COLOR_GREEN_BG)
+             .strokeColor(COLOR_GREEN_BORDER)
+             .lineWidth(0.8)
+             .fillAndStroke();
+          doc.restore();
+          
+          doc.font(FONT_BOLD).fontSize(9).fillColor(COLOR_GREEN_DARK)
+            .text('PAID', badgeX, badgeY + 4, { align: 'center', width: badgeWidth });
+        } else {
+          doc.font(FONT_BOLD).fontSize(9.5).fillColor('#1A1D20')
+            .text(val, detailsValueX, y, { align: 'left', width: detailsValueWidth });
+        }
+      };
 
-      doc.fillColor(secondaryColor)
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text(data.student.fullName, 50, 145)
-         .font('Helvetica')
-         .fillColor(secondaryColor)
-         .text(data.student.email, 50, 160)
-         .text(`Phone: ${data.student.mobileNumber}`, 50, 175)
-         .text(`College: ${data.student.collegeName}`, 50, 190, { width: 220 });
+      drawInvoiceDetailRow('Invoice No.', data.invoiceNumber, detailsTop);
+      drawInvoiceDetailRow('Invoice Date', data.date, detailsTop + 18);
 
-      // Company Info (Seller)
-      doc.fillColor(primaryColor)
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text('ISSUED BY:', 320, 130);
+      // Header Divider (adjusted for 2 detail rows instead of 3)
+      const headerDividerY = detailsTop + 44; // 2 rows × 18px + padding
+      doc.moveTo(MARGIN_LEFT, headerDividerY).lineTo(PAGE_WIDTH - MARGIN_RIGHT, headerDividerY)
+        .strokeColor('#E5E7EB').lineWidth(1).stroke();
 
-      doc.fillColor(secondaryColor)
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text('Turing Wings Private Limited', 320, 145)
-         .font('Helvetica')
-         .fillColor(secondaryColor)
-         .text('123 Innovation Way, Tech Park', 320, 160)
-         .text('Bangalore, KA, 560001', 320, 175)
-         .text('support@turingwings.com', 320, 190);
+      // --- BILL TO / BILL FROM COLUMNS ---
+      const columnsTop = headerDividerY + 20;
+      const leftColWidth = RIGHT_COLUMN_X - MARGIN_LEFT - 15;
 
-      // Spacer
-      doc.moveDown(2);
+      // Left Column: BILL TO
+      doc.font(FONT_BOLD).fontSize(10).fillColor(COLOR_GREEN_PRIMARY)
+        .text('BILL TO', MARGIN_LEFT, columnsTop);
+      doc.font(FONT_BOLD).fontSize(11.5).fillColor('#1A1D20')
+        .text(data.student.fullName, MARGIN_LEFT, columnsTop + 16);
+
+      let billToY = columnsTop + 34;
+      const drawInfoLine = (label, value, x, y) => {
+        doc.font(FONT_REGULAR).fontSize(9).fillColor('#666666')
+          .text(label, x, y, { width: 55 });
+        doc.font(FONT_REGULAR).fontSize(9).fillColor('#1A1D20')
+          .text(value, x + 58, y, { width: leftColWidth - 58 });
+        const h = doc.heightOfString(value, { width: leftColWidth - 58 });
+        return Math.max(15, h + 3);
+      };
+
+      billToY += drawInfoLine('Email:', data.student.email, MARGIN_LEFT, billToY);
+      billToY += drawInfoLine('Phone:', data.student.mobileNumber, MARGIN_LEFT, billToY);
+      billToY += drawInfoLine('College:', data.student.collegeName, MARGIN_LEFT, billToY);
+
+      if (data.student.stream) {
+        billToY += drawInfoLine('Stream:', data.student.stream, MARGIN_LEFT, billToY);
+      }
+      if (data.student.branch) {
+        billToY += drawInfoLine('Branch:', data.student.branch, MARGIN_LEFT, billToY);
+      }
+      if (data.student.currentYear) {
+        billToY += drawInfoLine('Year:', data.student.currentYear, MARGIN_LEFT, billToY);
+      }
+
+      // Right Column: BILL FROM
+      doc.font(FONT_BOLD).fontSize(10).fillColor(COLOR_GREEN_PRIMARY)
+        .text('BILL FROM', RIGHT_COLUMN_X, columnsTop);
+      doc.font(FONT_BOLD).fontSize(11.5).fillColor('#1A1D20')
+        .text('Turing Wings', RIGHT_COLUMN_X, columnsTop + 16);
+      doc.font(FONT_REGULAR).fontSize(9).fillColor('#666666')
+        .text('AI Engineering Community', RIGHT_COLUMN_X, columnsTop + 32);
+
+      let billFromY = columnsTop + 48;
+      const drawFromLine = (text, y) => {
+        doc.font(FONT_REGULAR).fontSize(9).fillColor('#333333')
+          .text(text, RIGHT_COLUMN_X, y, { width: RIGHT_COLUMN_WIDTH - 10 });
+        return doc.heightOfString(text, { width: RIGHT_COLUMN_WIDTH - 10 }) + 3;
+      };
+
+      billFromY += drawFromLine('Vijayawada, Andhra Pradesh, India - 520010', billFromY);
+      billFromY += drawFromLine('www.turingwings.com | hello@turingwings.com', billFromY);
+      billFromY += drawFromLine('Phone: +91 91234 56789', billFromY);
+      billFromY += drawFromLine('GSTIN: 37ABCDE1234F1Z5', billFromY);
+
+      // Section Divider
+      const tableTop = Math.max(billToY, billFromY) + 22;
+      doc.moveTo(MARGIN_LEFT, tableTop - 12).lineTo(PAGE_WIDTH - MARGIN_RIGHT, tableTop - 12)
+        .strokeColor('#E5E7EB').lineWidth(1).stroke();
 
       // --- TABLE SECTION ---
-      const tableTop = 235;
+      const tableHeaderHeight = 26;
+      const tableWidth = CONTENT_WIDTH;
       
-      // Draw Table Header Background
-      doc.rect(50, tableTop, 495, 24)
-         .fill(lightGray);
+      doc.rect(MARGIN_LEFT, tableTop, tableWidth, tableHeaderHeight).fill('#1E2022');
 
-      // Table Headers text
-      doc.fillColor(secondaryColor)
-         .fontSize(9)
-         .font('Helvetica-Bold')
-         .text('DESCRIPTION', 60, tableTop + 7)
-         .text('QTY', 360, tableTop + 7, { width: 50, align: 'center' })
-         .text('PRICE', 420, tableTop + 7, { width: 60, align: 'right' })
-         .text('AMOUNT', 485, tableTop + 7, { width: 50, align: 'right' });
+      // Table Header
+      doc.fillColor('white').font(FONT_BOLD).fontSize(9);
+      doc.text('#', MARGIN_LEFT + 10, tableTop + 8, { width: 30, align: 'center' });
+      doc.text('ITEM / DESCRIPTION', MARGIN_LEFT + 50, tableTop + 8, { width: 280 });
+      doc.text('AMOUNT (INR)', MARGIN_LEFT + 350, tableTop + 8, { width: 140, align: 'right' });
 
-      // Table Row Data
-      const rowTop = tableTop + 24;
-      doc.rect(50, rowTop, 495, 36)
-         .fill('#FFFFFF');
+      // Table Row
+      const rowTop = tableTop + tableHeaderHeight;
+      const itemTitle = data.cohort.title;
+      const itemDesc = data.cohort.description || "4-Week Cohort covering AI-powered Full Stack Web Development, projects, tools and real-world applications.";
+      const itemDescWidth = 280;
+      const amountColX = MARGIN_LEFT + 350;
 
-      // Draw bottom border for the row
-      doc.moveTo(50, rowTop + 36)
-         .lineTo(545, rowTop + 36)
-         .strokeColor('#F3F4F6')
-         .stroke();
+      doc.font(FONT_BOLD).fontSize(10);
+      const titleHeight = doc.heightOfString(itemTitle, { width: itemDescWidth });
+      doc.font(FONT_REGULAR).fontSize(8.5);
+      const descHeight = doc.heightOfString(itemDesc, { width: itemDescWidth });
+      
+      const rowHeight = Math.max(48, titleHeight + descHeight + 18);
 
-      // Row Text
-      doc.fillColor(secondaryColor)
-         .fontSize(9)
-         .font('Helvetica-Bold')
-         .text(data.cohort.title, 60, rowTop + 10, { width: 290 })
-         .fontSize(8)
-         .font('Helvetica')
-         .fillColor(textMuted)
-         .text('Cohort Registration & Access Fee', 60, rowTop + 22)
-         
-         .fillColor(secondaryColor)
-         .fontSize(9)
-         .font('Helvetica')
-         .text('1', 360, rowTop + 13, { width: 50, align: 'center' })
-         .text(`₹${Number(data.cohort.price).toFixed(2)}`, 420, rowTop + 13, { width: 60, align: 'right' })
-         .font('Helvetica-Bold')
-         .text(`₹${Number(data.cohort.price).toFixed(2)}`, 485, rowTop + 13, { width: 50, align: 'right' });
+      doc.moveTo(MARGIN_LEFT, rowTop + rowHeight).lineTo(PAGE_WIDTH - MARGIN_RIGHT, rowTop + rowHeight)
+        .strokeColor('#E5E7EB').lineWidth(1).stroke();
 
-      // --- TOTALS & DETAILS SECTION ---
-      const totalsTop = rowTop + 55;
+      // Row Content
+      doc.font(FONT_REGULAR).fontSize(9.5).fillColor('#666666')
+        .text('1', MARGIN_LEFT + 10, rowTop + 12, { width: 30, align: 'center' });
+      
+      doc.font(FONT_BOLD).fontSize(10).fillColor('#1A1D20')
+        .text(itemTitle, MARGIN_LEFT + 50, rowTop + 12, { width: itemDescWidth });
+      
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor('#555555')
+        .text(itemDesc, MARGIN_LEFT + 50, rowTop + 12 + titleHeight + 3, { width: itemDescWidth });
 
-      // Payment Method Details
-      doc.fillColor(primaryColor)
-         .fontSize(9)
-         .font('Helvetica-Bold')
-         .text('PAYMENT DETAILS', 50, totalsTop);
+      doc.font(FONT_BOLD).fontSize(10).fillColor('#1A1D20')
+         .text(formatCurrency(data.cohort.price), amountColX, rowTop + 12, { width: 130, align: 'right' });
 
-      doc.fillColor(secondaryColor)
-         .fontSize(8)
-         .font('Helvetica')
-         .text(`Gateway: Razorpay`, 50, totalsTop + 15)
-         .text(`Payment ID: ${data.paymentId}`, 50, totalsTop + 27)
-         .text(`Status: Success / Captured`, 50, totalsTop + 39);
+      // --- TOTALS SECTION ---
+      let totalsTop = rowTop + rowHeight + 16;
+      const totalsLabelX = amountColX - 110;
+      const totalsValueX = amountColX;
 
-      // Draw Subtotal & Grand Total
-      doc.fillColor(secondaryColor)
-         .fontSize(9)
-         .font('Helvetica')
-         .text('Subtotal:', 380, totalsTop, { width: 80, align: 'right' })
-         .text(`₹${Number(data.cohort.price).toFixed(2)}`, 470, totalsTop, { width: 75, align: 'right' })
-         
-         .text('Tax (0%):', 380, totalsTop + 15, { width: 80, align: 'right' })
-         .text('₹0.00', 470, totalsTop + 15, { width: 75, align: 'right' });
+      const drawTotalRow = (label, amount) => {
+        doc.font(FONT_REGULAR).fontSize(9).fillColor('#666666')
+          .text(label, totalsLabelX, totalsTop, { width: 110, align: 'right' });
+        doc.font(FONT_BOLD).fontSize(9).fillColor('#1A1D20')
+          .text(formatCurrency(amount), totalsValueX, totalsTop, { width: 130, align: 'right' });
+        totalsTop += 15;
+      };
 
-      // Draw line before grand total
-      doc.moveTo(380, totalsTop + 32)
-         .lineTo(545, totalsTop + 32)
-         .strokeColor('#E5E7EB')
-         .stroke();
+      drawTotalRow('Subtotal', data.cohort.price);
+      drawTotalRow('Discount', 0);
+      drawTotalRow('Tax (0%)', 0);
 
-      doc.fontSize(11)
-         .font('Helvetica-Bold')
-         .fillColor(primaryColor)
-         .text('Total Paid:', 380, totalsTop + 38, { width: 80, align: 'right' })
-         .text(`₹${Number(data.cohort.price).toFixed(2)}`, 470, totalsTop + 38, { width: 75, align: 'right' });
+      // Grand Total Box
+      totalsTop += 4;
+      const totalBoxHeight = 40;
+      const totalBoxX = totalsLabelX;
+      const totalBoxWidth = 110 + 130;
+      
+      doc.save();
+      doc.roundedRect(totalBoxX, totalsTop, totalBoxWidth, totalBoxHeight, 4)
+        .fillColor(COLOR_GREEN_BG).fill();
+      doc.restore();
+
+      doc.font(FONT_BOLD).fontSize(10.5).fillColor('#1A1D20')
+        .text('TOTAL', totalBoxX + 10, totalsTop + 13, { width: 100 });
+      doc.font(FONT_BOLD).fontSize(13.5).fillColor(COLOR_GREEN_DARK)
+         .text(formatCurrency(data.cohort.price), totalsValueX - 5, totalsTop + 9, { width: 135, align: 'right' });
+      doc.font(FONT_REGULAR).fontSize(8).fillColor('#555555')
+         .text('(Amount Paid)', totalsValueX - 5, totalsTop + 25, { width: 135, align: 'right' });
+
+      // --- PAYMENT DETAILS & THANK YOU BOX ---
+      const section2Top = totalsTop + totalBoxHeight + 22;
+      doc.moveTo(MARGIN_LEFT, section2Top).lineTo(PAGE_WIDTH - MARGIN_RIGHT, section2Top)
+        .strokeColor('#E5E7EB').lineWidth(1).stroke();
+
+      const payDetailsY = section2Top + 12;
+      const payDetailsColWidth = (RIGHT_COLUMN_X - MARGIN_LEFT) - 20;
+
+      doc.font(FONT_BOLD).fontSize(10).fillColor(COLOR_GREEN_PRIMARY)
+        .text('PAYMENT DETAILS', MARGIN_LEFT, payDetailsY);
+
+      let kyY = payDetailsY + 18;
+      const drawKyVal = (key, val) => {
+        doc.font(FONT_REGULAR).fontSize(9).fillColor('#666666')
+          .text(key, MARGIN_LEFT, kyY, { width: 75 });
+        doc.font(FONT_BOLD).fontSize(9).fillColor('#1A1D20')
+          .text(val, MARGIN_LEFT + 80, kyY, { width: payDetailsColWidth - 90 });
+        // Increase spacing to prevent overlap
+        kyY += 18;
+      };
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+
+      drawKyVal('Payment ID', data.paymentId);
+      drawKyVal('Payment Method', 'Razorpay');
+      drawKyVal('Payment Date', `${dateStr} | ${timeStr}`);
+      drawKyVal('Amount Paid', formatCurrency(data.cohort.price));
+
+      // Vertical Divider Line (between payment and thank you)
+      const dividerX = RIGHT_COLUMN_X - 10;
+      doc.moveTo(dividerX, section2Top + 12).lineTo(dividerX, kyY - 3)
+        .strokeColor('#E5E7EB').lineWidth(1).stroke();
+
+      // Thank You Box
+      const thankBoxTop = section2Top + 12;
+      const thankBoxWidth = PAGE_WIDTH - MARGIN_RIGHT - dividerX - 5;
+      const thankBoxHeight = kyY - thankBoxTop - 3;
+      
+      doc.save();
+      doc.roundedRect(dividerX + 10, thankBoxTop, thankBoxWidth - 15, thankBoxHeight, 4)
+         .fillColor('#F8FAFC')
+         .strokeColor('#E2E8F0')
+         .lineWidth(1)
+         .fillAndStroke();
+      doc.restore();
+
+      const thankBoxContentX = dividerX + 20;
+      doc.font(FONT_BOLD).fontSize(9.5).fillColor('#1A1D20')
+        .text('Thank you for choosing Turing Wings!', thankBoxContentX, thankBoxTop + 8, { width: thankBoxWidth - 25 });
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor('#555555')
+        .text('You will receive your cohort access details once batches are finalized.', thankBoxContentX, thankBoxTop + 23, { width: thankBoxWidth - 25 });
+      doc.font(FONT_ITALIC).fontSize(8.5).fillColor(COLOR_GREEN_PRIMARY)
+        .text('Stay tuned!', thankBoxContentX, thankBoxTop + 50);
+
+      // --- TERMS & QR CODE SECTION ---
+      const section3Top = section2Top + Math.max(kyY - section2Top, thankBoxHeight + 24);
+      doc.moveTo(MARGIN_LEFT, section3Top).lineTo(PAGE_WIDTH - MARGIN_RIGHT, section3Top)
+        .strokeColor('#E5E7EB').lineWidth(1).stroke();
+
+      const termsY = section3Top + 12;
+      doc.font(FONT_BOLD).fontSize(10).fillColor(COLOR_GREEN_PRIMARY)
+        .text('TERMS & CONDITIONS', MARGIN_LEFT, termsY);
+
+      let bulletY = termsY + 16;
+      const bulletWidth = RIGHT_COLUMN_X - MARGIN_LEFT - 20;
+      
+      const drawBullet = (text) => {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor('#333333');
+        doc.text('•', MARGIN_LEFT, bulletY);
+        doc.text(text, MARGIN_LEFT + 10, bulletY, { width: bulletWidth });
+        bulletY += doc.heightOfString(text, { width: bulletWidth }) + 3;
+      };
+      
+      drawBullet('This invoice is computer generated and does not require a physical signature.');
+      drawBullet('Fee once paid is non-refundable and non-transferable.');
+      drawBullet('For any queries or assistance, write to us at hello@turingwings.com');
+
+      // QR Code Box (right side)
+      const qrBoxTop = section3Top + 12;
+      const qrSize = 50;
+      const qrBoxX = RIGHT_COLUMN_X + 20;
+      
+      doc.save();
+      doc.roundedRect(qrBoxX, qrBoxTop, qrSize + 4, qrSize + 4, 4)
+         .fillColor('#FFFFFF')
+         .strokeColor('#E2E8F0')
+         .lineWidth(1)
+         .fillAndStroke();
+      doc.restore();
+
+      if (qrBuffer) {
+        doc.image(qrBuffer, qrBoxX + 2, qrBoxTop + 2, { width: qrSize, height: qrSize });
+      }
+
+      const qrTextX = qrBoxX + qrSize + 12;
+      doc.font(FONT_REGULAR).fontSize(8).fillColor('#666666')
+        .text('Scan to visit', qrTextX, qrBoxTop + 5);
+      doc.font(FONT_BOLD).fontSize(9).fillColor('#1A1D20')
+        .text('Turing Wings', qrTextX, qrBoxTop + 16);
+      doc.font(FONT_REGULAR).fontSize(8).fillColor(COLOR_GREEN_PRIMARY)
+        .text('www.turingwings.com', qrTextX, qrBoxTop + 29, { width: 120 });
 
       // --- FOOTER SECTION ---
-      const footerTop = 720;
+      const footerY = 770;
+      const footerHeight = 72;
+      doc.rect(0, footerY, PAGE_WIDTH, footerHeight).fill('#1A1D20');
+
+      const footerLogoSize = 32;
+      const footerLogoCenterY = footerY + 20 + footerLogoSize / 2; // Center of logo: 770 + 20 + 16 = 806
+      let whiteLogoDrawn = false;
+
+      if (fs.existsSync(logoWhitePath)) {
+        try {
+          doc.image(logoWhitePath, MARGIN_LEFT, footerY + 20, { width: footerLogoSize, height: footerLogoSize });
+          whiteLogoDrawn = true;
+        } catch (e) {
+          console.error('[pdfGenerator] Error loading footer white logo:', e);
+        }
+      }
+
+      const footerTextX = whiteLogoDrawn ? (MARGIN_LEFT + footerLogoSize + 12) : MARGIN_LEFT;
+      const footerDividerX = 220;
       
-      doc.moveTo(50, footerTop)
-         .lineTo(545, footerTop)
-         .strokeColor('#E5E7EB')
-         .lineWidth(0.5)
-         .stroke();
+      // Position company name centered with logo
+      // Font size 10.5 has approximate height of 12px, center it at footerLogoCenterY
+      doc.font(FONT_BOLD).fontSize(10.5).fillColor('white')
+        .text('TURING WINGS', footerTextX, footerLogoCenterY - 6);
+      // Tagline positioned below company name
+      doc.font(FONT_BOLD).fontSize(8).fillColor(COLOR_GREEN_PRIMARY)
+        .text('AI Engineering Community', footerTextX, footerLogoCenterY + 6);
 
-      doc.fontSize(8)
-         .font('Helvetica')
-         .fillColor(textMuted)
-         .text('Thank you for registering with Turing Wings!', 50, footerTop + 15, { align: 'center', width: 495 });
+      doc.moveTo(footerDividerX, footerY + 16).lineTo(footerDividerX, footerY + 56)
+        .strokeColor('#333538').lineWidth(1).stroke();
 
-      doc.text('This is a computer-generated invoice and does not require a physical signature.', 50, footerTop + 27, { align: 'center', width: 495 });
+      const footerRightX = footerDividerX + 15;
+      // Align right footer text with left footer content
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor('#DDDDDD')
+        .text('Empowering students to build the future with AI.', footerRightX, footerLogoCenterY - 6);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor(COLOR_GREEN_PRIMARY)
+        .text('Learn. Build. Innovate.', footerRightX, footerLogoCenterY + 6);
 
       doc.end();
     } catch (err) {

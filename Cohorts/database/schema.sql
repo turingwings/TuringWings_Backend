@@ -36,6 +36,7 @@ create index if not exists idx_students_mobile on public.students (mobile_number
 -- ------------------------------------------------------------
 create table if not exists public.cohorts (
     id          uuid primary key default gen_random_uuid(),
+    slug        text        not null unique,
     title       text        not null,
     description text,
     price       numeric(10, 2) not null default 0,
@@ -142,6 +143,16 @@ alter table public.payments enable row level security;
 -- ------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('invoices', 'invoices', true)
+on conflict (id) do nothing;
+
+-- ------------------------------------------------------------
+-- Seed Cohorts
+-- ------------------------------------------------------------
+insert into public.cohorts (id, slug, title, description, price, status)
+values
+  ('9e08dfe7-e9b3-4434-be0f-19708719e0a3', 'full-stack-batch-1', 'Full Stack Batch 1', 'Our inaugural Full Stack Web Development cohort.', 1.00, 'ACTIVE'),
+  ('d01b1a76-905d-4f27-bc5e-8848f95c4793', 'ai-engineering', 'AI Engineering Cohort', 'Master AI Engineering, LLMs, Vector Databases, Agents, and RAG architectures.', 499.00, 'ACTIVE'),
+  ('e239615a-cb28-4ad0-b8d6-4fe48705f134', 'ai-cybersecurity', 'AI Cybersecurity Cohort', 'Learn to secure AI systems and apply AI to detect and prevent cyber threats.', 499.00, 'ACTIVE')
 on conflict (id) do nothing;
 
 commit;
