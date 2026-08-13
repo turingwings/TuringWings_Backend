@@ -1,9 +1,11 @@
 const app = require('./app');
 const { env } = require('./config/env');
+const adminService = require('./services/admin.service');
 
 let server;
 
 async function startServer() {
+  await adminService.seedInitialAdmin();
   server = app.listen(env.port, () => {
     console.log(`[Server] Running in ${env.nodeEnv} mode on port ${env.port}`);
   });

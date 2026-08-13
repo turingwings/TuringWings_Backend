@@ -205,6 +205,75 @@ alter table public.registrations add column if not exists commission_earned nume
 alter table public.payments add column if not exists creator_id uuid references public.creators (id) on delete set null;
 
 -- ------------------------------------------------------------
+-- admin_users
+-- ------------------------------------------------------------
+create table if not exists public.admin_users (
+    id            uuid primary key default gen_random_uuid(),
+    name          text        not null,
+    email         text        not null unique,
+    password_hash text        not null,
+    role          text        not null default 'ADMIN',
+    created_at    timestamptz not null default now(),
+    updated_at    timestamptz not null default now()
+);
+
+create index if not exists idx_admin_users_email on public.admin_users (email);
+
+drop trigger if exists trg_admin_users_updated on public.admin_users;
+create trigger trg_admin_users_updated
+    before update on public.admin_users
+    for each row execute function public.set_updated_at();
+
+alter table public.admin_users enable row level security;
+
+-- ------------------------------------------------------------
+-- expenses
+-- ------------------------------------------------------------
+create table if not exists public.expenses (
+    id             uuid primary key default gen_random_uuid(),
+    name           text           not null,
+    category       text           not null,
+    amount         numeric(10, 2) not null,
+    date           date           not null default current_date,
+    description    text,
+    vendor         text,
+    payment_method text,
+    receipt_url    text,
+    created_by     uuid references public.admin_users (id) on delete set null,
+    created_at     timestamptz    not null default now(),
+    updated_at     timestamptz    not null default now()
+);
+
+create index if not exists idx_expenses_category on public.expenses (category);
+create index if not exists idx_expenses_date     on public.expenses (date);
+
+drop trigger if exists trg_expenses_updated on public.expenses;
+create trigger trg_expenses_updated
+    before update on public.expenses
+    for each row execute function public.set_updated_at();
+
+alter table public.expenses enable row level security;
+
+-- ------------------------------------------------------------
+-- admin_audit_logs
+-- ------------------------------------------------------------
+create table if not exists public.admin_audit_logs (
+    id          uuid primary key default gen_random_uuid(),
+    admin_id    uuid references public.admin_users (id) on delete set null,
+    admin_email text,
+    action      text        not null,
+    entity      text        not null,
+    entity_id   text,
+    metadata    jsonb,
+    created_at  timestamptz not null default now()
+);
+
+create index if not exists idx_admin_audit_logs_action on public.admin_audit_logs (action);
+create index if not exists idx_admin_audit_logs_date   on public.admin_audit_logs (created_at);
+
+alter table public.admin_audit_logs enable row level security;
+
+-- ------------------------------------------------------------
 -- Seed Cohorts
 -- ------------------------------------------------------------
 insert into public.cohorts (id, slug, title, description, price, status)
