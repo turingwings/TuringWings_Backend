@@ -37,4 +37,33 @@ async function updateStatus(id, status) {
   return data;
 }
 
-module.exports = { findByStudentAndCohort, create, updateStatus };
+async function countPaidRegistrationsByCohort(cohortId) {
+  const { count, error } = await supabase
+    .from(TABLE)
+    .select('*', { count: 'exact', head: true })
+    .eq('cohort_id', cohortId)
+    .in('status', ['PAID', 'ASSIGNED', 'ACTIVE', 'COMPLETED']);
+
+  if (error) throw error;
+  return count || 0;
+}
+
+async function updateUsernameAndRegNo(id, username, registrationNo) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ username, registration_no: registrationNo })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+module.exports = {
+  findByStudentAndCohort,
+  create,
+  updateStatus,
+  countPaidRegistrationsByCohort,
+  updateUsernameAndRegNo,
+};

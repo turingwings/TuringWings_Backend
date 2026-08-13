@@ -12,7 +12,9 @@ const registrationRepository = require('../repositories/registration.repository'
 const paymentRepository = require('../repositories/payment.repository');
 
 const { generateInvoicePdf } = require('../utils/pdfGenerator');
+const { generateUsername } = require('../utils/usernameGenerator');
 const emailService = require('./email.service');
+const referralService = require('./referral.service');
 
 /**
  * Call Razorpay API to create an order.
@@ -192,6 +194,40 @@ async function verifyPayment(payload) {
     throw extractPostgresError(error);
   }
 
+  // 4b. Generate & Assign Username if not already assigned
+  let username = registration.username;
+  if (!username) {
+    try {
+      const currentPaidCount = await registrationRepository.countPaidRegistrationsByCohort(cohort.id);
+      const regNo = registration.registration_no || (currentPaidCount + 1);
+      username = generateUsername(cohort.title, student.full_name, regNo);
+
+      const updatedReg = await registrationRepository.updateUsernameAndRegNo(
+        registration.id,
+        username,
+        regNo
+      );
+      if (updatedReg) {
+        registration = updatedReg;
+      }
+    } catch (usernameError) {
+      console.error('[PaymentService] Failed to persist username to registration:', usernameError);
+      if (!username) {
+        username = generateUsername(cohort.title, student.full_name, 1);
+      }
+    }
+  }
+
+  // 4c. Process Creator Referral Conversion if referralCode is present
+  const referralCode = payload.referralCode || payload.creatorCode;
+  if (referralCode) {
+    try {
+      await referralService.processReferralConversion(registration.id, referralCode);
+    } catch (referralErr) {
+      console.error('[PaymentService] Failed to process referral conversion:', referralErr);
+    }
+  }
+
   // 5. Create Payment Record
   let payment;
   try {
@@ -291,6 +327,7 @@ async function verifyPayment(payload) {
     studentId: student.id,
     registrationId: registration.id,
     paymentId: payment.id,
+    username,
     invoiceUrl,
   };
 }

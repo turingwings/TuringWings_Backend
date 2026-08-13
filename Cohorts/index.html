@@ -536,7 +536,9 @@
 
           const verification = await verifyPayment(verifyPayload);
           if (verification.ok) {
-            showMessage('success', 'Payment successful! Your registration is confirmed.');
+            const respData = (verification.data && verification.data.data) || {};
+            const usernameMsg = respData.username ? ' Username: ' + respData.username + '.' : '';
+            showMessage('success', 'Payment successful! Your registration is confirmed.' + usernameMsg);
           } else {
             showMessage(
               'error',

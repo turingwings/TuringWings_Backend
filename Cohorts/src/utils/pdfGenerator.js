@@ -110,42 +110,27 @@ function generateInvoicePdf(data) {
       doc.font(FONT_BOLD).fontSize(28).fillColor('#1A1D20')
         .text('INVOICE', invoiceHeaderX, headerY + 8, { align: 'right', width: invoiceHeaderWidth - 10 });
 
-      // Invoice Details (right column)
+      // Invoice Details (right column, aligned right under INVOICE)
       const detailsTop = headerY + 48;
       const detailsLabelX = invoiceHeaderX;
-      const detailsValueX = invoiceHeaderX + 80;
-      const detailsValueWidth = invoiceHeaderWidth - 90;
+      const detailsValueX = invoiceHeaderX + 85;
+      const detailsValueWidth = invoiceHeaderWidth - 95;
 
-      const drawInvoiceDetailRow = (label, val, y, isBadge = false) => {
+      const drawInvoiceDetailRow = (label, val, y) => {
         doc.font(FONT_REGULAR).fontSize(9.5).fillColor('#666666')
-          .text(label, detailsLabelX, y, { width: 80 });
-        
-        if (isBadge) {
-          // Position badge closer to the value area, right-aligned within the column
-          const badgeWidth = 55;
-          const badgeX = detailsValueX + detailsValueWidth - badgeWidth;
-          const badgeY = y - 2;
-          doc.save();
-          doc.roundedRect(badgeX, badgeY, badgeWidth, 18, 3)
-             .fillColor(COLOR_GREEN_BG)
-             .strokeColor(COLOR_GREEN_BORDER)
-             .lineWidth(0.8)
-             .fillAndStroke();
-          doc.restore();
-          
-          doc.font(FONT_BOLD).fontSize(9).fillColor(COLOR_GREEN_DARK)
-            .text('PAID', badgeX, badgeY + 4, { align: 'center', width: badgeWidth });
-        } else {
-          doc.font(FONT_BOLD).fontSize(9.5).fillColor('#1A1D20')
-            .text(val, detailsValueX, y, { align: 'left', width: detailsValueWidth });
-        }
+          .text(label, detailsLabelX, y, { width: 85 });
+        doc.font(FONT_BOLD).fontSize(9.5).fillColor('#1A1D20')
+          .text(val, detailsValueX, y, { align: 'right', width: detailsValueWidth });
       };
 
       drawInvoiceDetailRow('Invoice No.', data.invoiceNumber, detailsTop);
       drawInvoiceDetailRow('Invoice Date', data.date, detailsTop + 18);
+      if (data.paymentId) {
+        drawInvoiceDetailRow('Payment ID', data.paymentId, detailsTop + 36);
+      }
 
-      // Header Divider (adjusted for 2 detail rows instead of 3)
-      const headerDividerY = detailsTop + 44; // 2 rows × 18px + padding
+      // Header Divider
+      const headerDividerY = detailsTop + (data.paymentId ? 58 : 40);
       doc.moveTo(MARGIN_LEFT, headerDividerY).lineTo(PAGE_WIDTH - MARGIN_RIGHT, headerDividerY)
         .strokeColor('#E5E7EB').lineWidth(1).stroke();
 
@@ -199,9 +184,8 @@ function generateInvoicePdf(data) {
       };
 
       billFromY += drawFromLine('Vijayawada, Andhra Pradesh, India - 520010', billFromY);
-      billFromY += drawFromLine('www.turingwings.com | hello@turingwings.com', billFromY);
-      billFromY += drawFromLine('Phone: +91 91234 56789', billFromY);
-      billFromY += drawFromLine('GSTIN: 37ABCDE1234F1Z5', billFromY);
+      billFromY += drawFromLine('www.turingwings.com | contact@turingwings.com', billFromY);
+      billFromY += drawFromLine('Phone: +91 8341999296', billFromY);
 
       // Section Divider
       const tableTop = Math.max(billToY, billFromY) + 22;
@@ -362,7 +346,7 @@ function generateInvoicePdf(data) {
       
       drawBullet('This invoice is computer generated and does not require a physical signature.');
       drawBullet('Fee once paid is non-refundable and non-transferable.');
-      drawBullet('For any queries or assistance, write to us at hello@turingwings.com');
+      drawBullet('For any queries or assistance, write to us at contact@turingwings.com');
 
       // QR Code Box (right side)
       const qrBoxTop = section3Top + 12;

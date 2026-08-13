@@ -59,14 +59,19 @@ create type registration_status as enum (
 );
 
 create table if not exists public.registrations (
-    id         uuid primary key default gen_random_uuid(),
-    student_id uuid not null references public.students (id) on delete cascade,
-    cohort_id  uuid not null references public.cohorts (id)   on delete cascade,
-    status     registration_status not null default 'INITIATED',
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
+    id              uuid primary key default gen_random_uuid(),
+    student_id      uuid not null references public.students (id) on delete cascade,
+    cohort_id       uuid not null references public.cohorts (id)   on delete cascade,
+    status          registration_status not null default 'INITIATED',
+    registration_no integer,
+    username        text unique,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now(),
     unique (student_id, cohort_id)
 );
+
+alter table public.registrations add column if not exists registration_no integer;
+alter table public.registrations add column if not exists username text unique;
 
 comment on table public.registrations is 'A student registration for a cohort';
 
@@ -144,6 +149,60 @@ alter table public.payments enable row level security;
 insert into storage.buckets (id, name, public)
 values ('invoices', 'invoices', true)
 on conflict (id) do nothing;
+
+-- ------------------------------------------------------------
+-- creators
+-- ------------------------------------------------------------
+create table if not exists public.creators (
+    id           uuid primary key default gen_random_uuid(),
+    name         text        not null,
+    email        text        not null unique,
+    code         text        not null unique,
+    is_active    boolean     not null default true,
+    total_clicks integer     not null default 0,
+    created_at   timestamptz not null default now(),
+    updated_at   timestamptz not null default now()
+);
+
+create index if not exists idx_creators_code on public.creators (code);
+create index if not exists idx_creators_email on public.creators (email);
+
+drop trigger if exists trg_creators_updated on public.creators;
+create trigger trg_creators_updated
+    before update on public.creators
+    for each row execute function public.set_updated_at();
+
+alter table public.creators enable row level security;
+
+-- ------------------------------------------------------------
+-- referral_captures
+-- ------------------------------------------------------------
+create table if not exists public.referral_captures (
+    id         uuid primary key default gen_random_uuid(),
+    creator_id uuid        not null references public.creators (id) on delete cascade,
+    email      text        not null,
+    status     text        not null default 'CAPTURED'
+               check (status in ('CAPTURED', 'EXISTING_STUDENT', 'ENROLLED')),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    unique (creator_id, email)
+);
+
+create index if not exists idx_referral_captures_creator on public.referral_captures (creator_id);
+create index if not exists idx_referral_captures_email   on public.referral_captures (email);
+
+drop trigger if exists trg_referral_captures_updated on public.referral_captures;
+create trigger trg_referral_captures_updated
+    before update on public.referral_captures
+    for each row execute function public.set_updated_at();
+
+alter table public.referral_captures enable row level security;
+
+-- Add creator_id & commission_earned to registrations & payments
+alter table public.registrations add column if not exists creator_id uuid references public.creators (id) on delete set null;
+alter table public.registrations add column if not exists commission_earned numeric(10, 2) default 0;
+
+alter table public.payments add column if not exists creator_id uuid references public.creators (id) on delete set null;
 
 -- ------------------------------------------------------------
 -- Seed Cohorts

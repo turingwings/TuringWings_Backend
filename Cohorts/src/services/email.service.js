@@ -24,11 +24,11 @@ async function sendInvoiceEmail(email, studentName, cohortTitle, amount, invoice
 
   const htmlContent = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333; line-height: 1.6;">
-      <h2 style="color: #5B21B6; border-bottom: 2px solid #5B21B6; padding-bottom: 10px;">Registration Confirmed!</h2>
+      <h2 style="color: #16A34A; border-bottom: 2px solid #16A34A; padding-bottom: 10px;">Registration Confirmed!</h2>
       <p>Dear <strong>${studentName}</strong>,</p>
       <p>Thank you for registering with <strong>Turing Wings</strong>! We are excited to welcome you to our learning community.</p>
       
-      <div style="background-color: #F3F4F6; border-left: 4px solid #5B21B6; padding: 15px; margin: 20px 0; border-radius: 4px;">
+      <div style="background-color: #F0FDF4; border-left: 4px solid #16A34A; padding: 15px; margin: 20px 0; border-radius: 4px;">
         <h3 style="margin-top: 0; color: #1F2937;">Registration Summary</h3>
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
@@ -48,7 +48,7 @@ async function sendInvoiceEmail(email, studentName, cohortTitle, amount, invoice
 
       <p>We have generated and attached your official PDF invoice to this email.</p>
       <p>Our program coordinators will reach out to you shortly with onboarding details, cohort schedule, and platform login credentials.</p>
-      <p>If you have any questions in the meantime, please feel free to reply to this email or contact us at <a href="mailto:support@turingwings.com" style="color: #5B21B6;">support@turingwings.com</a>.</p>
+      <p>If you have any questions in the meantime, please feel free to reply to this email or contact us at <a href="mailto:contact@turingwings.com" style="color: #16A34A;">contact@turingwings.com</a>.</p>
       
       <hr style="border: 0; border-top: 1px solid #E5E7EB; margin: 30px 0;" />
       <p style="font-size: 12px; color: #6B7280; text-align: center;">
