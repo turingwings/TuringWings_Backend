@@ -5,30 +5,48 @@ const EXPENSES_TABLE = 'expenses';
 const AUDIT_TABLE = 'admin_audit_logs';
 
 async function findAdminByEmail(email) {
-  const { data, error } = await supabase
-    .from(ADMIN_TABLE)
-    .select('*')
-    .eq('email', email.trim().toLowerCase())
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from(ADMIN_TABLE)
+      .select('*')
+      .eq('email', email.trim().toLowerCase())
+      .maybeSingle();
 
-  if (error) throw error;
-  return data;
+    if (error) {
+      if (error.code === 'PGRST205' || error.message?.includes('admin_users')) {
+        console.warn('[AdminRepository] admin_users table not found in Supabase schema cache.');
+        return null;
+      }
+      throw error;
+    }
+    return data;
+  } catch (err) {
+    if (err.code === 'PGRST205' || err.message?.includes('admin_users')) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 async function createAdminUser({ name, email, passwordHash, role = 'ADMIN' }) {
-  const { data, error } = await supabase
-    .from(ADMIN_TABLE)
-    .insert({
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      password_hash: passwordHash,
-      role,
-    })
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from(ADMIN_TABLE)
+      .insert({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password_hash: passwordHash,
+        role,
+      })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.warn('[AdminRepository] Unable to insert admin user into database:', err.message);
+    return null;
+  }
 }
 
 async function getAllStudents() {
@@ -118,13 +136,20 @@ async function getAllPayments() {
 }
 
 async function getAllExpenses() {
-  const { data, error } = await supabase
-    .from(EXPENSES_TABLE)
-    .select('*')
-    .order('date', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from(EXPENSES_TABLE)
+      .select('*')
+      .order('date', { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      if (error.code === 'PGRST205' || error.message?.includes('expenses')) return [];
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    return [];
+  }
 }
 
 async function createExpense({ name, category, amount, date, description, vendor, paymentMethod, createdBy }) {

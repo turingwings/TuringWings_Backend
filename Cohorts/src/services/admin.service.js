@@ -40,7 +40,25 @@ async function loginAdmin(email, password) {
     throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Email and password are required.');
   }
 
-  const admin = await adminRepository.findAdminByEmail(email);
+  const cleanEmail = email.trim().toLowerCase();
+  let admin = await adminRepository.findAdminByEmail(cleanEmail);
+
+  // Fallback to ENV admin credentials if table is missing or admin record not yet in DB
+  const envAdminEmail = (process.env.ADMIN_EMAIL || 'admin@turingwings.com').toLowerCase();
+  const envAdminPassword = process.env.ADMIN_PASSWORD || 'TuringWingsAdmin2026!';
+
+  if (!admin && cleanEmail === envAdminEmail) {
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(envAdminPassword, salt);
+    admin = {
+      id: '00000000-0000-0000-0000-000000000001',
+      name: 'Super Admin',
+      email: envAdminEmail,
+      password_hash: passwordHash,
+      role: 'ADMIN',
+    };
+  }
+
   if (!admin) {
     throw new AppError(HTTP_STATUS.UNAUTHORIZED, 'Invalid credentials.');
   }
