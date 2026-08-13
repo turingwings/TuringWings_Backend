@@ -50,13 +50,21 @@ async function createAdminUser({ name, email, passwordHash, role = 'ADMIN' }) {
 }
 
 async function getAllStudents() {
-  const { data, error } = await supabase
-    .from('students')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      console.warn('[AdminRepository] getAllStudents warning:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('[AdminRepository] getAllStudents catch:', err.message);
+    return [];
+  }
 }
 
 async function getStudentById(id) {
@@ -80,59 +88,88 @@ async function getStudentById(id) {
 }
 
 async function getAllCreators() {
-  const { data, error } = await supabase
-    .from('creators')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('creators')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      console.warn('[AdminRepository] getAllCreators warning:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('[AdminRepository] getAllCreators catch:', err.message);
+    return [];
+  }
 }
 
 async function getCreatorById(id) {
-  const { data: creator, error: creatorErr } = await supabase
-    .from('creators')
-    .select('*')
-    .eq('id', id)
-    .single();
+  try {
+    const { data: creator, error: creatorErr } = await supabase
+      .from('creators')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-  if (creatorErr) throw creatorErr;
+    if (creatorErr) throw creatorErr;
 
-  const { data: captures } = await supabase
-    .from('referral_captures')
-    .select('*')
-    .eq('creator_id', id);
+    const { data: captures } = await supabase
+      .from('referral_captures')
+      .select('*')
+      .eq('creator_id', id);
 
-  const { data: registrations } = await supabase
-    .from('registrations')
-    .select('*, student:students(*), cohort:cohorts(*)')
-    .eq('creator_id', id);
+    const { data: registrations } = await supabase
+      .from('registrations')
+      .select('*, student:students(*), cohort:cohorts(*)')
+      .eq('creator_id', id);
 
-  return {
-    ...creator,
-    captures: captures || [],
-    registrations: registrations || [],
-  };
+    return {
+      ...creator,
+      captures: captures || [],
+      registrations: registrations || [],
+    };
+  } catch (err) {
+    console.warn('[AdminRepository] getCreatorById catch:', err.message);
+    return null;
+  }
 }
 
 async function getAllCohorts() {
-  const { data, error } = await supabase
-    .from('cohorts')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('cohorts')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      console.warn('[AdminRepository] getAllCohorts warning:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('[AdminRepository] getAllCohorts catch:', err.message);
+    return [];
+  }
 }
 
 async function getAllPayments() {
-  const { data, error } = await supabase
-    .from('payments')
-    .select('*, registration:registrations(*, student:students(*), cohort:cohorts(*)), creator:creators(*)')
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*, registration:registrations(*, student:students(*), cohort:cohorts(*)), creator:creators(*)')
+      .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      console.warn('[AdminRepository] getAllPayments warning:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('[AdminRepository] getAllPayments catch:', err.message);
+    return [];
+  }
 }
 
 async function getAllExpenses() {
