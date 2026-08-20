@@ -303,20 +303,43 @@ create trigger trg_cohort_pricing_tiers_updated
 
 alter table public.cohort_pricing_tiers enable row level security;
 
-insert into public.cohorts (id, slug, title, description, price, total_seats, status)
-values
-  ('9e08dfe7-e9b3-4434-be0f-19708719e0a3', 'full-stack-batch-1', 'Full Stack Batch 1', 'Our inaugural Full Stack Web Development cohort.', 1.00, 70, 'ACTIVE'),
-  ('d01b1a76-905d-4f27-bc5e-8848f95c4793', 'ai-engineering', 'AI Engineering Cohort', 'Master AI Engineering, LLMs, Vector Databases, Agents, and RAG architectures.', 499.00, 70, 'ACTIVE'),
-  ('e239615a-cb28-4ad0-b8d6-4fe48705f134', 'ai-cybersecurity', 'AI Cybersecurity Cohort', 'Learn to secure AI systems and apply AI to detect and prevent cyber threats.', 499.00, 70, 'ACTIVE')
-on conflict (id) do nothing;
+INSERT INTO public.cohorts (
+    id,
+    slug,
+    title,
+    description,
+    price,
+    total_seats,
+    status
+)
+VALUES
+(
+    '9e08dfe7-e9b3-4434-be0f-19708719e0a3',
+    'webdevxai',
+    'AI-Native Software Builder',
+    'Become an AI-Native Software Builder through a 4-week live cohort covering React, Node.js, PostgreSQL, Supabase, AI APIs, MCP, CLI agents, and multi-agent development workflows.',
+    499.00,
+    70,
+    'ACTIVE'
+),
+(
+    'd01b1a76-905d-4f27-bc5e-8848f95c4793',
+    'cyberxai',
+    'AI Cybersecurity',
+    'Master cybersecurity with AI-powered security through networking, Kali Linux, web application pentesting, Python security automation, OSINT, MCP, and autonomous AI security agents.',
+    499.00,
+    70,
+    'ACTIVE'
+)
+ON CONFLICT (id) DO NOTHING;
 
--- Seed Pricing Tiers for Cohort 01 (ai-engineering) and Cohort 02 (ai-cybersecurity)
+-- Seed Pricing Tiers for Cohort 01 (webdevxai) and Cohort 02 (cyberxai)
 insert into public.cohort_pricing_tiers (id, cohort_id, tier_name, capacity, price, tier_order, currency)
 values
-  ('11111111-1111-4111-a111-111111111111', 'd01b1a76-905d-4f27-bc5e-8848f95c4793', 'Founding Seats', 30, 499.00, 1, 'INR'),
-  ('22222222-2222-4222-a222-222222222222', 'd01b1a76-905d-4f27-bc5e-8848f95c4793', 'Regular Registration', 40, 599.00, 2, 'INR'),
-  ('33333333-3333-4333-a333-333333333333', 'e239615a-cb28-4ad0-b8d6-4fe48705f134', 'Founding Seats', 30, 499.00, 1, 'INR'),
-  ('44444444-4444-4444-a444-444444444444', 'e239615a-cb28-4ad0-b8d6-4fe48705f134', 'Regular Registration', 40, 599.00, 2, 'INR')
-on conflict (id) do nothing;
+  ('11111111-1111-4111-a111-111111111111', '9e08dfe7-e9b3-4434-be0f-19708719e0a3', 'Founding Seats', 30, 499.00, 1, 'INR'),
+  ('22222222-2222-4222-a222-222222222222', '9e08dfe7-e9b3-4434-be0f-19708719e0a3', 'Regular Registration', 40, 599.00, 2, 'INR'),
+  ('33333333-3333-4333-a333-333333333333', 'd01b1a76-905d-4f27-bc5e-8848f95c4793', 'Founding Seats', 30, 499.00, 1, 'INR'),
+  ('44444444-4444-4444-a444-444444444444', 'd01b1a76-905d-4f27-bc5e-8848f95c4793', 'Regular Registration', 40, 599.00, 2, 'INR')
+on conflict (id) do update set cohort_id = excluded.cohort_id;
 
 commit;
