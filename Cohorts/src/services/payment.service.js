@@ -82,8 +82,25 @@ async function createOrder(cohortId) {
     throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Cohort is not open for registration');
   }
 
-  // Calculate price in paise (₹1 = 100 paise)
-  const amountPaise = Math.round(Number(cohort.price) * 100);
+  // Calculate dynamic seat stats and active pricing tier on server
+  const cohortService = require('./cohort.service');
+  const [pricingTiers, paidCount] = await Promise.all([
+    cohortRepository.getPricingTiersByCohortId(cohort.id),
+    cohortRepository.countPaidRegistrations(cohort.id),
+  ]);
+
+  const seatStats = cohortService.calculateCohortSeatStats(cohort, pricingTiers, paidCount);
+
+  if (seatStats.isSoldOut || !seatStats.registrationOpen) {
+    throw new AppError(
+      HTTP_STATUS.BAD_REQUEST,
+      'Cohort is sold out or registrations are closed.'
+    );
+  }
+
+  // Server-determined active price
+  const activePrice = seatStats.currentPricing ? seatStats.currentPricing.price : Number(cohort.price);
+  const amountPaise = Math.round(Number(activePrice) * 100);
 
   const orderPayload = {
     amount: amountPaise,
@@ -91,6 +108,8 @@ async function createOrder(cohortId) {
     receipt: `receipt_cohort_${cohortId.slice(0, 8)}_${Date.now()}`,
     notes: {
       cohortId,
+      tierName: seatStats.currentPricing ? seatStats.currentPricing.name : 'Standard',
+      tierPrice: activePrice,
     },
   };
 
@@ -101,6 +120,8 @@ async function createOrder(cohortId) {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
+      tierName: seatStats.currentPricing ? seatStats.currentPricing.name : 'Standard',
+      tierPrice: activePrice,
       raw: order,
     };
   } catch (error) {
@@ -228,12 +249,19 @@ async function verifyPayment(payload) {
     }
   }
 
-  // 5. Create Payment Record
+  // 5. Calculate active price for payment record & PDF invoice
+  const [pricingTiers, paidCount] = await Promise.all([
+    cohortRepository.getPricingTiersByCohortId(cohort.id),
+    cohortRepository.countPaidRegistrations(cohort.id),
+  ]);
+  const seatStats = cohortService.calculateCohortSeatStats(cohort, pricingTiers, paidCount);
+  const activePrice = seatStats.currentPricing ? seatStats.currentPricing.price : Number(cohort.price);
+
   let payment;
   try {
     payment = await paymentRepository.create({
       registrationId: registration.id,
-      amount: cohort.price,
+      amount: activePrice,
       currency: 'INR',
       razorpayOrderId: payload.razorpay_order_id,
       razorpayPaymentId: payload.razorpay_payment_id,
@@ -268,7 +296,7 @@ async function verifyPayment(payload) {
       },
       cohort: {
         title: cohort.title,
-        price: cohort.price,
+        price: activePrice,
         description: cohort.description,
       },
     });

@@ -276,11 +276,47 @@ alter table public.admin_audit_logs enable row level security;
 -- ------------------------------------------------------------
 -- Seed Cohorts
 -- ------------------------------------------------------------
-insert into public.cohorts (id, slug, title, description, price, status)
+alter table public.cohorts add column if not exists total_seats integer not null default 70;
+
+-- ------------------------------------------------------------
+-- cohort_pricing_tiers
+-- ------------------------------------------------------------
+create table if not exists public.cohort_pricing_tiers (
+    id            uuid primary key default gen_random_uuid(),
+    cohort_id     uuid not null references public.cohorts (id) on delete cascade,
+    tier_name     text not null,
+    capacity      integer not null,
+    price         numeric(10, 2) not null,
+    tier_order    integer not null default 1,
+    currency      text not null default 'INR',
+    created_at    timestamptz not null default now(),
+    updated_at    timestamptz not null default now()
+);
+
+create index if not exists idx_cohort_pricing_tiers_cohort on public.cohort_pricing_tiers (cohort_id);
+create index if not exists idx_cohort_pricing_tiers_order on public.cohort_pricing_tiers (cohort_id, tier_order);
+
+drop trigger if exists trg_cohort_pricing_tiers_updated on public.cohort_pricing_tiers;
+create trigger trg_cohort_pricing_tiers_updated
+    before update on public.cohort_pricing_tiers
+    for each row execute function public.set_updated_at();
+
+alter table public.cohort_pricing_tiers enable row level security;
+
+insert into public.cohorts (id, slug, title, description, price, total_seats, status)
 values
-  ('9e08dfe7-e9b3-4434-be0f-19708719e0a3', 'full-stack-batch-1', 'Full Stack Batch 1', 'Our inaugural Full Stack Web Development cohort.', 1.00, 'ACTIVE'),
-  ('d01b1a76-905d-4f27-bc5e-8848f95c4793', 'ai-engineering', 'AI Engineering Cohort', 'Master AI Engineering, LLMs, Vector Databases, Agents, and RAG architectures.', 499.00, 'ACTIVE'),
-  ('e239615a-cb28-4ad0-b8d6-4fe48705f134', 'ai-cybersecurity', 'AI Cybersecurity Cohort', 'Learn to secure AI systems and apply AI to detect and prevent cyber threats.', 499.00, 'ACTIVE')
+  ('9e08dfe7-e9b3-4434-be0f-19708719e0a3', 'full-stack-batch-1', 'Full Stack Batch 1', 'Our inaugural Full Stack Web Development cohort.', 1.00, 70, 'ACTIVE'),
+  ('d01b1a76-905d-4f27-bc5e-8848f95c4793', 'ai-engineering', 'AI Engineering Cohort', 'Master AI Engineering, LLMs, Vector Databases, Agents, and RAG architectures.', 499.00, 70, 'ACTIVE'),
+  ('e239615a-cb28-4ad0-b8d6-4fe48705f134', 'ai-cybersecurity', 'AI Cybersecurity Cohort', 'Learn to secure AI systems and apply AI to detect and prevent cyber threats.', 499.00, 70, 'ACTIVE')
+on conflict (id) do nothing;
+
+-- Seed Pricing Tiers for Cohort 01 (ai-engineering) and Cohort 02 (ai-cybersecurity)
+insert into public.cohort_pricing_tiers (id, cohort_id, tier_name, capacity, price, tier_order, currency)
+values
+  ('11111111-1111-4111-a111-111111111111', 'd01b1a76-905d-4f27-bc5e-8848f95c4793', 'Founding Seats', 30, 499.00, 1, 'INR'),
+  ('22222222-2222-4222-a222-222222222222', 'd01b1a76-905d-4f27-bc5e-8848f95c4793', 'Regular Registration', 40, 599.00, 2, 'INR'),
+  ('33333333-3333-4333-a333-333333333333', 'e239615a-cb28-4ad0-b8d6-4fe48705f134', 'Founding Seats', 30, 499.00, 1, 'INR'),
+  ('44444444-4444-4444-a444-444444444444', 'e239615a-cb28-4ad0-b8d6-4fe48705f134', 'Regular Registration', 40, 599.00, 2, 'INR')
 on conflict (id) do nothing;
 
 commit;
