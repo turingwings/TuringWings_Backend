@@ -15,6 +15,7 @@ const { generateInvoicePdf } = require('../utils/pdfGenerator');
 const { generateUsername } = require('../utils/usernameGenerator');
 const emailService = require('./email.service');
 const referralService = require('./referral.service');
+const cohortService = require('./cohort.service');
 
 /**
  * Call Razorpay API to create an order.
@@ -83,7 +84,6 @@ async function createOrder(cohortId) {
   }
 
   // Calculate dynamic seat stats and active pricing tier on server
-  const cohortService = require('./cohort.service');
   const [pricingTiers, paidCount] = await Promise.all([
     cohortRepository.getPricingTiersByCohortId(cohort.id),
     cohortRepository.countPaidRegistrations(cohort.id),

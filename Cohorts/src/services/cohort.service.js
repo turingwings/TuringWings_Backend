@@ -40,7 +40,6 @@ function calculateCohortSeatStats(cohort, pricingTiers = [], paidCount = 0) {
       }
       calculatedTiers.push(tierObj);
     }
-  }
 
   const isSoldOut = seatsRemaining <= 0;
   const currentPrice = activeTier ? activeTier.price : Number(cohort.price);
