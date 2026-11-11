@@ -6,9 +6,9 @@ const {
   getFinance,
   getStudents,
   getStudentById,
-  getCreators,
-  createCreator,
-  getCreatorById,
+  getCoupons,
+  createCoupon,
+  toggleCoupon,
   getCohorts,
   getPayments,
   getExpenses,
@@ -31,9 +31,9 @@ router.get('/dashboard', getDashboard);
 router.get('/finance', getFinance);
 router.get('/students', getStudents);
 router.get('/students/:id', getStudentById);
-router.get('/creators', getCreators);
-router.post('/creators', createCreator);
-router.get('/creators/:id', getCreatorById);
+router.get('/coupons', getCoupons);
+router.post('/coupons', createCoupon);
+router.patch('/coupons/:id/status', toggleCoupon);
 router.get('/cohorts', getCohorts);
 router.get('/payments', getPayments);
 router.get('/expenses', getExpenses);

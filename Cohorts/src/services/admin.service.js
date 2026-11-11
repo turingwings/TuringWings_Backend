@@ -3,7 +3,8 @@ const jwt = require('jsonwebtoken');
 const AppError = require('../utils/AppError');
 const { HTTP_STATUS } = require('../utils/httpStatus');
 const adminRepository = require('../repositories/admin.repository');
-const { RAZORPAY_FEE_PERCENTAGE, COMMISSION_TIERS } = require('../config/commissions.config');
+const couponRepository = require('../repositories/coupon.repository');
+const { RAZORPAY_FEE_PERCENTAGE } = require('../config/commissions.config');
 const { JWT_SECRET } = require('../middlewares/adminAuth.middleware');
 
 /**
@@ -36,7 +37,7 @@ async function seedInitialAdmin() {
  * Authenticate admin and return token + admin profile.
  */
 async function loginAdmin(email, password) {
-  if (!email || !password) {
+  if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
     throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Email and password are required.');
   }
 
@@ -100,9 +101,9 @@ async function loginAdmin(email, password) {
  * Get high-level business overview statistics.
  */
 async function getDashboardOverview() {
-  const [students, creators, cohorts, payments, expenses] = await Promise.all([
+  const [students, coupons, cohorts, payments, expenses] = await Promise.all([
     adminRepository.getAllStudents(),
-    adminRepository.getAllCreators(),
+    couponRepository.getAllCoupons().catch(() => []),
     adminRepository.getAllCohorts(),
     adminRepository.getAllPayments(),
     adminRepository.getAllExpenses(),
@@ -110,15 +111,8 @@ async function getDashboardOverview() {
 
   // Compute Gross Revenue from successful payments
   let grossRevenue = 0;
-  let creatorCommissionsTotal = 0;
-
   payments.forEach((p) => {
-    const amount = Number(p.amount || 0);
-    grossRevenue += amount;
-
-    if (p.registration && p.registration.commission_earned) {
-      creatorCommissionsTotal += Number(p.registration.commission_earned);
-    }
+    grossRevenue += Number(p.amount || 0);
   });
 
   // Calculate Razorpay Fee estimate
@@ -131,16 +125,20 @@ async function getDashboardOverview() {
     otherExpensesTotal += Number(e.amount || 0);
   });
 
-  const totalExpenses = Number((razorpayFees + creatorCommissionsTotal + otherExpensesTotal).toFixed(2));
+  const totalExpenses = Number((razorpayFees + otherExpensesTotal).toFixed(2));
   const netContribution = Number((grossRevenue - totalExpenses).toFixed(2));
-  const netContributionPercentage = grossRevenue > 0 ? Number(((netContribution / grossRevenue) * 100).toFixed(1)) : 0;
+  const netContributionPercentage = grossRevenue > 0
+    ? Number(((netContribution / grossRevenue) * 100).toFixed(1))
+    : 0;
 
   // Cohort statistics
   let totalCapacity = 0;
   let seatsSoldTotal = 0;
   const cohortStats = cohorts.map((c) => {
-    const capacity = 100; // Default capacity per cohort
-    const enrolledCount = payments.filter((p) => p.registration && p.registration.cohort_id === c.id).length;
+    const capacity = Number(c.total_seats) || 70;
+    const enrolledCount = payments.filter(
+      (p) => p.registration && p.registration.cohort_id === c.id
+    ).length;
     totalCapacity += capacity;
     seatsSoldTotal += enrolledCount;
 
@@ -156,13 +154,16 @@ async function getDashboardOverview() {
     };
   });
 
+  // Coupon usage stats
+  const activeCoupons = coupons.filter((c) => c.is_active);
+  const totalCouponUses = coupons.reduce((sum, c) => sum + (c.uses_count || 0), 0);
+
   return {
     financial: {
       grossRevenue,
       razorpayFees,
       razorpayFeePercentage: RAZORPAY_FEE_PERCENTAGE,
       netPaymentRevenue,
-      creatorCommissions: creatorCommissionsTotal,
       otherExpenses: otherExpensesTotal,
       totalExpenses,
       netContribution,
@@ -171,14 +172,12 @@ async function getDashboardOverview() {
     students: {
       totalRegistered: students.length,
       totalEnrolled: payments.length,
-      webDevCount: payments.filter((p) => p.registration && p.registration.cohort && p.registration.cohort.slug === 'full-stack-batch-1').length,
-      cyberCount: payments.filter((p) => p.registration && p.registration.cohort && (p.registration.cohort.slug === 'ai-cybersecurity' || p.registration.cohort.slug === 'ai-engineering')).length,
     },
-    creators: {
-      totalCreators: creators.length,
-      activeCreators: creators.filter((c) => c.is_active).length,
-      creatorEnrollments: payments.filter((p) => p.creator_id).length,
-      topCreators: creators.slice(0, 5),
+    coupons: {
+      totalCoupons: coupons.length,
+      activeCoupons: activeCoupons.length,
+      totalUses: totalCouponUses,
+      couponList: coupons,
     },
     cohorts: {
       totalCohorts: cohorts.length,
@@ -207,9 +206,36 @@ async function getFinanceSummary() {
 
   return {
     ...overview.financial,
-    commissionTiers: COMMISSION_TIERS,
     expenseBreakdown: expenseCategories,
   };
+}
+
+/**
+ * Validate and create a new expense record.
+ */
+async function addExpense(payload, createdBy) {
+  const { name, category, amount, date, description, vendor, paymentMethod } = payload || {};
+  if (typeof name !== 'string' || !name.trim()) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Expense name is required.');
+  }
+  if (typeof category !== 'string' || !category.trim()) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Expense category is required.');
+  }
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Expense amount must be a positive number.');
+  }
+
+  return adminRepository.createExpense({
+    name,
+    category,
+    amount: numericAmount,
+    date,
+    description,
+    vendor,
+    paymentMethod,
+    createdBy,
+  });
 }
 
 module.exports = {
@@ -217,4 +243,5 @@ module.exports = {
   loginAdmin,
   getDashboardOverview,
   getFinanceSummary,
+  addExpense,
 };

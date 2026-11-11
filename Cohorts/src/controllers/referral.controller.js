@@ -10,7 +10,7 @@ const validateCreator = asyncHandler(async (req, res) => {
 });
 
 const captureEmail = asyncHandler(async (req, res) => {
-  const { email, creatorCode } = req.body;
+  const { email, creatorCode } = req.body || {};
   const result = await referralService.captureEmail(email, creatorCode);
   return apiSuccess(res, result.message, result, HTTP_STATUS.OK);
 });
@@ -32,7 +32,7 @@ const createAdminCreator = asyncHandler(async (req, res) => {
 });
 
 const toggleCreatorStatus = asyncHandler(async (req, res) => {
-  const { id, isActive } = req.body;
+  const { id, isActive } = req.body || {};
   const updated = await referralService.toggleCreatorStatus(id, isActive);
   return apiSuccess(res, 'Creator status updated', updated, HTTP_STATUS.OK);
 });

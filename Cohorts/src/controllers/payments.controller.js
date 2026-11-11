@@ -4,8 +4,8 @@ const asyncHandler = require('../utils/asyncHandler');
 const paymentService = require('../services/payment.service');
 
 const createOrder = asyncHandler(async (req, res) => {
-  const { cohortId } = req.body;
-  const orderDetails = await paymentService.createOrder(cohortId);
+  const { cohortId, couponCode } = req.body || {};
+  const orderDetails = await paymentService.createOrder({ cohortId, couponCode });
   return apiSuccess(res, 'Order created successfully', orderDetails, HTTP_STATUS.OK);
 });
 

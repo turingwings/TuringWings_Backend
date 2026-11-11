@@ -1,8 +1,12 @@
 const supabase = require('../config/supabase');
+const AppError = require('../utils/AppError');
+const { HTTP_STATUS } = require('../utils/httpStatus');
+const { extractPostgresError } = require('../utils/pgError');
 
 const ADMIN_TABLE = 'admin_users';
 const EXPENSES_TABLE = 'expenses';
 const AUDIT_TABLE = 'admin_audit_logs';
+const FALLBACK_ADMIN_ID = '00000000-0000-0000-0000-000000000001';
 
 async function findAdminByEmail(email) {
   try {
@@ -72,14 +76,19 @@ async function getStudentById(id) {
     .from('students')
     .select('*')
     .eq('id', id)
-    .single();
+    .maybeSingle();
 
-  if (studentErr) throw studentErr;
+  if (studentErr) throw extractPostgresError(studentErr);
+  if (!student) {
+    throw new AppError(HTTP_STATUS.NOT_FOUND, 'Student not found.');
+  }
 
-  const { data: registrations } = await supabase
+  const { data: registrations, error: regErr } = await supabase
     .from('registrations')
     .select('*, cohort:cohorts(*), payments(*)')
     .eq('student_id', id);
+
+  if (regErr) throw extractPostgresError(regErr);
 
   return {
     ...student,
@@ -190,6 +199,7 @@ async function getAllExpenses() {
 }
 
 async function createExpense({ name, category, amount, date, description, vendor, paymentMethod, createdBy }) {
+  const resolvedCreatedBy = createdBy && createdBy !== FALLBACK_ADMIN_ID ? createdBy : null;
   const { data, error } = await supabase
     .from(EXPENSES_TABLE)
     .insert({
@@ -200,12 +210,12 @@ async function createExpense({ name, category, amount, date, description, vendor
       description: description || null,
       vendor: vendor || null,
       payment_method: paymentMethod || null,
-      created_by: createdBy || null,
+      created_by: resolvedCreatedBy,
     })
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw extractPostgresError(error);
   return data;
 }
 
@@ -215,9 +225,12 @@ async function deleteExpense(id) {
     .delete()
     .eq('id', id)
     .select()
-    .single();
+    .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw extractPostgresError(error);
+  if (!data) {
+    throw new AppError(HTTP_STATUS.NOT_FOUND, 'Expense not found.');
+  }
   return data;
 }
 

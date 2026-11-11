@@ -204,10 +204,9 @@
 
     <div class="card">
       <!--
-        Test mode banner. When wiring up the real page, remove the ₹1 banner
-        and read the actual price from the selected cohort instead of CONFIG.amount.
+        Price banner: populated dynamically from the selected cohort's active pricing tier.
       -->
-      <div class="price-banner" id="amountBanner">Test Mode — Paying ₹1</div>
+      <div class="price-banner" id="amountBanner">Select a cohort to see pricing</div>
 
       <form id="registrationForm" novalidate>
         <div class="form-group">
@@ -270,7 +269,7 @@
           </div>
         </div>
 
-        <button type="submit" class="pay-button" id="payButton" disabled>Pay ₹1</button>
+        <button type="submit" class="pay-button" id="payButton" disabled>Register &amp; Pay</button>
       </form>
 
       <div class="message" id="messageBox" role="status" aria-live="polite"></div>
@@ -287,11 +286,11 @@
       // ------------------------------------------------------------
       const CONFIG = {
         baseUrl: 'http://localhost:5000',
-        // TEST amount in INR (whole units). Replace with the real cohort
-        // price when the backend starts charging actual amounts.
-        amount: 1,
         currency: 'INR',
       };
+
+      // Stores cohort data keyed by id for quick price lookups
+      let cohortMap = {};
 
       // ----------------------------------------------------------------------------
       // DOM helpers
@@ -329,8 +328,18 @@
       }
 
       function setBusy(busy) {
-        payButton.disabled = busy || cohortSelect.value === '';
-        payButton.textContent = busy ? 'Please wait...' : 'Pay ₹' + CONFIG.amount;
+        const selectedCohort = cohortMap[cohortSelect.value];
+        const price = selectedCohort
+          ? (selectedCohort.currentPricing ? selectedCohort.currentPricing.price : selectedCohort.price)
+          : null;
+        payButton.disabled = busy || !cohortSelect.value;
+        if (busy) {
+          payButton.textContent = 'Please wait...';
+        } else if (price) {
+          payButton.textContent = 'Register & Pay ₹' + Number(price).toFixed(0);
+        } else {
+          payButton.textContent = 'Register & Pay';
+        }
       }
 
       // ----------------------------------------------------------------------------
@@ -403,14 +412,24 @@
           placeholder.textContent = 'Select a cohort';
           cohortSelect.appendChild(placeholder);
 
+          // Reset cohort map
+          cohortMap = {};
+
           cohorts.forEach(function (cohort) {
+            cohortMap[cohort.id] = cohort;
             const option = document.createElement('option');
             option.value = cohort.id;
-            option.textContent = cohort.title + ' — ₹' + cohort.price;
+            // Show active tier name and price (e.g. "AI-Native Builder — Founding Seats ₹499")
+            const tierLabel = cohort.currentPricing
+              ? cohort.currentPricing.name + ' ₹' + Number(cohort.currentPricing.price).toFixed(0)
+              : '₹' + Number(cohort.price).toFixed(0);
+            option.textContent = cohort.title + ' — ' + tierLabel;
             cohortSelect.appendChild(option);
           });
 
           cohortSelect.disabled = false;
+          // Trigger change to update the price banner for any pre-selected cohort
+          cohortSelect.dispatchEvent(new Event('change'));
           clearMessage();
         } catch (error) {
           cohortSelect.innerHTML = '';
@@ -427,11 +446,12 @@
       // ----------------------------------------------------------------------------
       // API calls
       // ----------------------------------------------------------------------------
-      async function createOrder(payload) {
+      async function createOrder(cohortId) {
         const res = await fetch(CONFIG.baseUrl + '/api/v1/payments/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          // Backend create-order only needs cohortId; price is server-determined
+          body: JSON.stringify({ cohortId }),
         });
         const data = await res.json().catch(function () { return {}; });
         if (!res.ok) {
@@ -516,7 +536,8 @@
 
         let orderData;
         try {
-          orderData = await createOrder(registrationPayload);
+          // Pass only cohortId; price is fully server-determined
+          orderData = await createOrder(registrationPayload.cohortId);
         } catch (error) {
           setBusy(false);
           showMessage('error', error.message);
@@ -554,7 +575,19 @@
       }
 
       form.addEventListener('submit', handleSubmit);
-      cohortSelect.addEventListener('change', function () { setBusy(false); });
+      cohortSelect.addEventListener('change', function () {
+        const cohort = cohortMap[cohortSelect.value];
+        if (cohort) {
+          const tierName = cohort.currentPricing ? cohort.currentPricing.name : 'Registration';
+          const price = cohort.currentPricing ? cohort.currentPricing.price : cohort.price;
+          const seatsLeft = cohort.currentPricing ? cohort.currentPricing.seatsRemaining : cohort.seatsRemaining;
+          banner.textContent = tierName + ' \u2014 \u20B9' + Number(price).toFixed(0)
+            + (seatsLeft !== undefined ? ' (' + seatsLeft + ' seats left)' : '');
+        } else {
+          banner.textContent = 'Select a cohort to see pricing';
+        }
+        setBusy(false);
+      });
 
       loadCohorts();
     })();

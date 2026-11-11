@@ -1,5 +1,6 @@
 const AppError = require('../utils/AppError');
 const { HTTP_STATUS } = require('../utils/httpStatus');
+const supabase = require('../config/supabase');
 const referralRepository = require('../repositories/referral.repository');
 const studentRepository = require('../repositories/student.repository');
 
@@ -57,11 +58,15 @@ async function captureEmail(email, creatorCode) {
 
   const cleanEmail = email.trim().toLowerCase();
 
-  // Check if student is already registered in system
-  const existingStudent = await studentRepository.findByEmailOrMobile({
-    email: cleanEmail,
-    mobileNumber: '0000000000', // fallback search email
-  }).catch(() => null);
+  // Check if student is already registered in system — query by email only.
+  // Using a dummy mobile like '0000000000' was a bug: it could accidentally
+  // match a real student who has that mobile number stored.
+  const { data: existingStudent } = await supabase
+    .from('students')
+    .select('id')
+    .eq('email', cleanEmail)
+    .maybeSingle()
+    .catch(() => ({ data: null }));
 
   const captureStatus = existingStudent ? 'EXISTING_STUDENT' : 'CAPTURED';
 

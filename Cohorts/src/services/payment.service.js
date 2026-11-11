@@ -14,7 +14,7 @@ const paymentRepository = require('../repositories/payment.repository');
 const { generateInvoicePdf } = require('../utils/pdfGenerator');
 const { generateUsername } = require('../utils/usernameGenerator');
 const emailService = require('./email.service');
-const referralService = require('./referral.service');
+const couponService = require('./coupon.service');
 const cohortService = require('./cohort.service');
 
 /**
@@ -61,10 +61,10 @@ function postRazorpayOrder(keyId, keySecret, orderPayload) {
 /**
  * Create a new Razorpay order for the given cohort.
  * 
- * @param {string} cohortId
+ * @param {Object} params - { cohortId, couponCode? }
  * @returns {Promise<Object>} Order details
  */
-async function createOrder(cohortId) {
+async function createOrder({ cohortId, couponCode } = {}) {
   const keyId = env.razorpay.keyId;
   const keySecret = env.razorpay.keySecret;
 
@@ -83,32 +83,26 @@ async function createOrder(cohortId) {
     throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Cohort is not open for registration');
   }
 
-  // Calculate dynamic seat stats and active pricing tier on server
-  const [pricingTiers, paidCount] = await Promise.all([
-    cohortRepository.getPricingTiersByCohortId(cohort.id),
-    cohortRepository.countPaidRegistrations(cohort.id),
-  ]);
-
-  const seatStats = cohortService.calculateCohortSeatStats(cohort, pricingTiers, paidCount);
-
-  if (seatStats.isSoldOut || !seatStats.registrationOpen) {
-    throw new AppError(
-      HTTP_STATUS.BAD_REQUEST,
-      'Cohort is sold out or registrations are closed.'
-    );
+  const paidCount = await cohortRepository.countPaidRegistrations(cohort.id);
+  const totalSeats = Number(cohort.total_seats) || 70;
+  if (paidCount >= totalSeats) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, 'All seats for this cohort are sold out');
   }
 
-  // Server-determined active price
-  const activePrice = seatStats.currentPricing ? seatStats.currentPricing.price : Number(cohort.price);
+  // Server-determined price: coupon unlocks Founding price, otherwise Regular price
+  const pricingTiers = await cohortRepository.getPricingTiersByCohortId(cohort.id);
+  const { price: activePrice, currency: activeCurrency, tierName: activeTierName } =
+    await couponService.resolvePrice(pricingTiers, couponCode, cohortId);
+
   const amountPaise = Math.round(Number(activePrice) * 100);
 
   const orderPayload = {
     amount: amountPaise,
-    currency: 'INR',
+    currency: activeCurrency,
     receipt: `receipt_cohort_${cohortId.slice(0, 8)}_${Date.now()}`,
     notes: {
       cohortId,
-      tierName: seatStats.currentPricing ? seatStats.currentPricing.name : 'Standard',
+      tierName: activeTierName,
       tierPrice: activePrice,
     },
   };
@@ -120,7 +114,7 @@ async function createOrder(cohortId) {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      tierName: seatStats.currentPricing ? seatStats.currentPricing.name : 'Standard',
+      tierName: activeTierName,
       tierPrice: activePrice,
       raw: order,
     };
@@ -169,18 +163,44 @@ async function verifyPayment(payload) {
   }
 
   // 3. Find or Create Student
+  const cleanEmail = payload.email.trim().toLowerCase();
   let student;
   try {
-    student = await studentRepository.findByEmailOrMobile({
-      email: payload.email,
-      mobileNumber: payload.mobileNumber,
-    });
+    const [byEmail, byMobile] = await Promise.all([
+      supabase
+        .from('students')
+        .select('*')
+        .eq('email', cleanEmail)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data;
+        }),
+      supabase
+        .from('students')
+        .select('*')
+        .eq('mobile_number', payload.mobileNumber)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data;
+        }),
+    ]);
+
+    if (byEmail && byMobile && byEmail.id !== byMobile.id) {
+      throw new AppError(
+        HTTP_STATUS.CONFLICT,
+        'Email and mobile number belong to different registered students.'
+      );
+    }
+
+    student = byEmail || byMobile || null;
 
     if (!student) {
       student = await studentRepository.create({
         fullName: payload.fullName,
         mobileNumber: payload.mobileNumber,
-        email: payload.email,
+        email: cleanEmail,
         collegeName: payload.collegeName,
         stream: payload.stream,
         branch: payload.branch,
@@ -188,6 +208,7 @@ async function verifyPayment(payload) {
       });
     }
   } catch (error) {
+    if (error.isOperational) throw error;
     throw extractPostgresError(error);
   }
 
@@ -201,7 +222,7 @@ async function verifyPayment(payload) {
 
     if (existingRegistration) {
       registration = existingRegistration;
-      if (registration.status !== 'PAID' && registration.status !== 'ACTIVE' && registration.status !== 'COMPLETED') {
+      if (!['PAID', 'ASSIGNED', 'ACTIVE', 'COMPLETED'].includes(registration.status)) {
         registration = await registrationRepository.updateStatus(registration.id, 'PAID');
       }
     } else {
@@ -220,7 +241,7 @@ async function verifyPayment(payload) {
   if (!username) {
     try {
       const currentPaidCount = await registrationRepository.countPaidRegistrationsByCohort(cohort.id);
-      const regNo = registration.registration_no || (currentPaidCount + 1);
+      const regNo = registration.registration_no || Math.max(1, currentPaidCount);
       username = generateUsername(cohort.title, student.full_name, regNo);
 
       const updatedReg = await registrationRepository.updateUsernameAndRegNo(
@@ -239,30 +260,37 @@ async function verifyPayment(payload) {
     }
   }
 
-  // 4c. Process Creator Referral Conversion if referralCode is present
-  const referralCode = payload.referralCode || payload.creatorCode;
-  if (referralCode) {
+  // 4c. Process Coupon and resolve active price
+  const couponCode = payload.couponCode;
+  const pricingTiers = await cohortRepository.getPricingTiersByCohortId(cohort.id);
+  let resolvedCouponId = null;
+  let activePrice;
+  let activeCurrency = 'INR';
+
+  if (typeof couponCode === 'string' && couponCode.trim()) {
     try {
-      await referralService.processReferralConversion(registration.id, referralCode);
-    } catch (referralErr) {
-      console.error('[PaymentService] Failed to process referral conversion:', referralErr);
+      const validated = await couponService.validateCoupon(couponCode, cohort.id);
+      resolvedCouponId = validated.couponId;
+      activePrice = validated.unlockedTier.price;
+      activeCurrency = validated.unlockedTier.currency || 'INR';
+    } catch (couponErr) {
+      // Coupon may have expired between order creation and verify — log and fall back to default tier
+      console.warn('[PaymentService] Coupon validation at verify time failed:', couponErr.message);
     }
   }
 
-  // 5. Calculate active price for payment record & PDF invoice
-  const [pricingTiers, paidCount] = await Promise.all([
-    cohortRepository.getPricingTiersByCohortId(cohort.id),
-    cohortRepository.countPaidRegistrations(cohort.id),
-  ]);
-  const seatStats = cohortService.calculateCohortSeatStats(cohort, pricingTiers, paidCount);
-  const activePrice = seatStats.currentPricing ? seatStats.currentPricing.price : Number(cohort.price);
+  if (activePrice === undefined) {
+    const defaultResolved = await couponService.resolvePrice(pricingTiers, null, cohort.id);
+    activePrice = defaultResolved.price;
+    activeCurrency = defaultResolved.currency || 'INR';
+  }
 
   let payment;
   try {
     payment = await paymentRepository.create({
       registrationId: registration.id,
       amount: activePrice,
-      currency: 'INR',
+      currency: activeCurrency,
       razorpayOrderId: payload.razorpay_order_id,
       razorpayPaymentId: payload.razorpay_payment_id,
       razorpaySignature: payload.razorpay_signature,
@@ -270,6 +298,9 @@ async function verifyPayment(payload) {
   } catch (error) {
     throw extractPostgresError(error);
   }
+
+  // Record coupon use non-blocking only after payment record succeeds
+  couponService.recordCouponUse(resolvedCouponId);
 
   // 6. Generate Invoice PDF
   const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${payload.razorpay_payment_id.slice(-6).toUpperCase()}`;
@@ -338,11 +369,13 @@ async function verifyPayment(payload) {
 
   // 9. Send Confirmation Email via Resend
   try {
+    // activePrice is the tier-resolved amount actually charged (e.g. 599 for Regular tier),
+    // NOT cohort.price which is just the base DB column value.
     await emailService.sendInvoiceEmail(
       student.email,
       student.full_name,
       cohort.title,
-      cohort.price,
+      activePrice,
       invoiceNumber,
       pdfBuffer
     );

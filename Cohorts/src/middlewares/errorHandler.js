@@ -5,7 +5,7 @@ const messages = require('../constants/messages');
 
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-  let statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
+  let statusCode = err.statusCode || err.status || HTTP_STATUS.INTERNAL_SERVER_ERROR;
   let message = err.message || messages.server.internal;
   let errors = err.errors || null;
 
